@@ -7,7 +7,7 @@
 
 class Character : public Util::GameObject {
 public:
-    explicit Character(const std::string& ImagePath);
+    explicit Character(const std::string& ImagePath, bool skipSetImage = false);
 
     Character(const Character&) = delete;
 
@@ -29,9 +29,11 @@ public:
 
     // TODO: Implement the collision detection
     [[nodiscard]] bool IfCollides(const std::shared_ptr<Character>& other) const {
-        (void) other;
-        return false;
+        glm::vec2 diff = m_Transform.translation - other->GetPosition();
+        float distance = glm::length(diff);
+        return distance < 50.0f;  // 根據圖像大小微調碰撞半徑
     }
+
 
     // TODO: Add and implement more methods and properties as needed to finish Giraffe Adventure.
 

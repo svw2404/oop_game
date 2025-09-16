@@ -50,6 +50,9 @@ private:
 
     std::shared_ptr<AnimatedCharacter> m_Bee;
     std::shared_ptr<AnimatedCharacter> m_Ball;
+    float m_CountTimer = 0.0f;
+    int m_CountStep = 3;
+    int m_CountFrame = 0;
 
     std::shared_ptr<PhaseResourceManger> m_PRM;
 

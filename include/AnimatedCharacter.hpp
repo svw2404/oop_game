@@ -7,8 +7,9 @@
 #include "Util/Animation.hpp"
 #include "Util/GameObject.hpp"
 
+#include "Character.hpp"
 
-class AnimatedCharacter : public Util::GameObject {
+class AnimatedCharacter : public Character{
 
 public:
     explicit AnimatedCharacter(const std::vector<std::string>& AnimationPaths);
@@ -25,6 +26,10 @@ public:
         auto temp = std::dynamic_pointer_cast<Util::Animation>(m_Drawable);
         temp->SetLooping(looping);
     }
+
+    void Update();
+
+    void Play();
 
     [[nodiscard]] bool IfAnimationEnds() const;
 

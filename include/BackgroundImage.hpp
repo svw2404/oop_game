@@ -12,8 +12,9 @@ public:
 
         Util::Image* image = dynamic_cast<Util::Image*>(m_Drawable.get());
 
+        //­I´º¤j¤p
         if (image) {
-            image->SetSize(glm::vec2(192.0f, 108.0f));
+            image->SetSize(glm::vec2(1244.16f, 699.84f));
         }
     }
 

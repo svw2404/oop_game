@@ -8,12 +8,16 @@ class BackgroundImage : public Util::GameObject {
 
 public:
     BackgroundImage() : GameObject(
-            std::make_unique<Util::Image>(GA_RESOURCE_DIR"/Image/Background/phase0.png"), -10) {
+            std::make_unique<Util::Image>(GA_RESOURCE_DIR"/Image/Background/background.jpeg"), -10) {
     }
 
     void NextPhase(const int phase) {
         auto temp = std::dynamic_pointer_cast<Util::Image>(m_Drawable);
         temp->SetImage(ImagePath(phase));
+    }
+
+    void SetSize(float widthScale, float heightScale) {
+        m_Transform.scale = glm::vec2(widthScale, heightScale);
     }
 
 private:

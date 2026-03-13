@@ -8,7 +8,13 @@ class BackgroundImage : public Util::GameObject {
 
 public:
     BackgroundImage() : GameObject(
-            std::make_unique<Util::Image>(GA_RESOURCE_DIR"/Image/Background/background.jpeg"), -10) {
+        std::make_unique<Util::Image>(GA_RESOURCE_DIR"/Image/Background/background0.png"), -10) {
+
+        Util::Image* image = dynamic_cast<Util::Image*>(m_Drawable.get());
+
+        if (image) {
+            image->SetSize(glm::vec2(192.0f, 108.0f));
+        }
     }
 
     void NextPhase(const int phase) {

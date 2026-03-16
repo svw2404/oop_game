@@ -5,9 +5,7 @@
 
 #include "Util/Renderer.hpp"
 #include "Character.hpp"
-#include "Util/Text.hpp"
-#include "PhaseResourceManger.hpp"
-#include "AnimatedCharacter.hpp"
+#include "BackgroundImage.hpp"
 
 class App {
 public:
@@ -20,43 +18,31 @@ public:
     State GetCurrentState() const { return m_CurrentState; }
 
     void Start();
-
     void Update();
-
-    void End(); // NOLINT(readability-convert-member-functions-to-static)
+    void End();
 
 private:
     void ValidTask();
+    void CheckDiamondCollection();
+    void HandleFireboyInput();
+    void UpdateFireboyPhysics();
 
 private:
-    enum class Phase {
-        CHANGE_CHARACTER_IMAGE,
-        ABLE_TO_MOVE,
-        COLLIDE_DETECTION,
-        BEE_ANIMATION,
-        OPEN_THE_DOORS,
-        COUNTDOWN,
-    };
-
-
     State m_CurrentState = State::START;
-    Phase m_Phase = Phase::CHANGE_CHARACTER_IMAGE;
 
     Util::Renderer m_Root;
+        
+    std::shared_ptr<BackgroundImage> m_Background;
+    std::shared_ptr<Character> m_Fireboy;
+    std::shared_ptr<Character> m_Diamond;
 
-    std::shared_ptr<Character> m_Giraffe;
-    std::shared_ptr<Character> m_Chest;
-    std::vector<std::shared_ptr<Character>> m_Doors;
+    glm::vec2 m_FireboyVelocity = { 0.0f, 0.0f };
+    bool m_FireboyOnGround = false;
 
-    std::shared_ptr<AnimatedCharacter> m_Bee;
-    std::shared_ptr<AnimatedCharacter> m_Ball;
-    float m_CountTimer = 0.0f;
-    int m_CountStep = 3;
-    int m_CountFrame = 0;
-
-    std::shared_ptr<PhaseResourceManger> m_PRM;
-
-    bool m_EnterDown = false;
+    float m_MoveSpeed = 4.0f;
+    float m_JumpSpeed = 14.0f;
+    float m_Gravity = 0.7f;
+    float m_GroundY = -220.0f;
 };
 
 #endif

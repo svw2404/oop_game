@@ -27,20 +27,20 @@ public:
 
     void SetPosition(const glm::vec2& Position) { m_Transform.translation = Position; }
 
-    // TODO: Implement the collision detection
     [[nodiscard]] bool IfCollides(const std::shared_ptr<Character>& other) const {
         glm::vec2 diff = m_Transform.translation - other->GetPosition();
         float distance = glm::length(diff);
-        return distance < 50.0f;  // 根據圖像大小微調碰撞半徑
+        return distance < 50.0f;  
     }
 
-
-    // TODO: Add and implement more methods and properties as needed to finish Giraffe Adventure.
+    [[nodiscard]] const glm::vec2& GetSize() const { return m_Size; }
+    void SetSize(const glm::vec2& size);
 
 private:
     void ResetPosition() { m_Transform.translation = {0, 0}; }
-
+    glm::vec2 m_Size = { 100.0f, 100.0f };
     std::string m_ImagePath;
+
 };
 
 

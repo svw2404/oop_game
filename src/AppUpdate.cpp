@@ -2,6 +2,7 @@
 
 #include "Util/Input.hpp"
 #include "Util/Keycode.hpp"
+#include <unordered_map>
 
 void App::HandleFireboyInput() {
     glm::vec2 oldPos = m_Fireboy->GetPosition();
@@ -28,14 +29,21 @@ App::RectObject App::ImageRectToWorldRect(float x1, float y1, float x2, float y2
     float scaleX = m_BackgroundDisplayedSize.x / m_BackgroundOriginalSize.x;
     float scaleY = m_BackgroundDisplayedSize.y / m_BackgroundOriginalSize.y;
 
-    float left = x1 * scaleX - m_BackgroundDisplayedSize.x * 0.5f;
-    float right = x2 * scaleX - m_BackgroundDisplayedSize.x * 0.5f;
-    float top = m_BackgroundDisplayedSize.y * 0.5f - y1 * scaleY;
-    float bottom = m_BackgroundDisplayedSize.y * 0.5f - y2 * scaleY;
+    // 1. 先計算顯示在螢幕上的寬高
+    float width = std::abs(x2 - x1) * scaleX;
+    float height = std::abs(y2 - y1) * scaleY;
 
+    // 2. 計算該區塊在「圖片座標系」下的中心點 (顯示尺寸)
+    float imageCenterX = (x1 + x2) * 0.5f * scaleX;
+    float imageCenterY = (y1 + y2) * 0.5f * scaleY;
+
+    // 3. 轉換為「世界座標系」 (0,0 在中心)
+    // 世界 X = 圖片中心X - 總寬的一半
+    // 世界 Y = 總高的一半 - 圖片中心Y (因為 Y 軸向上)
     RectObject rect;
-    rect.center = { (left + right) * 0.5f, (top + bottom) * 0.5f };
-    rect.size = { right - left, top - bottom };
+    rect.center.x = imageCenterX - (m_BackgroundDisplayedSize.x * 0.5f);
+    rect.center.y = (m_BackgroundDisplayedSize.y * 0.5f) - imageCenterY;
+    rect.size = { width, height };
 
     return rect;
 }
@@ -135,10 +143,21 @@ void App::CheckDiamondCollection() {
     }
 }
 
+static std::unordered_map<HeadBodyCharacter*, glm::vec2> s_LastPos;
+const float IDLE_EPSILON = 0.5f; // 每幀小於此值視為靜止（視你的座標/時間尺度調整）
+
 void App::Update() {
     HandleFireboyInput();
     UpdateFireboyPhysics();
     CheckDiamondCollection();
+
+    glm::vec2 pos = m_Fireboy->GetPosition();
+    // 使用 raw pointer 作為 unordered_map 的 key（s_LastPos 的鍵型別為 HeadBodyCharacter*）
+    glm::vec2 prev = s_LastPos[m_Fireboy.get()];
+    float moved = glm::length(pos - prev);
+    bool isIdle = moved < IDLE_EPSILON;
+    m_Fireboy->SetIdleState(isIdle);
+    s_LastPos[m_Fireboy.get()] = pos;
 
     if (Util::Input::IsKeyPressed(Util::Keycode::ESCAPE) || Util::Input::IfExit()) {
         m_CurrentState = State::END;

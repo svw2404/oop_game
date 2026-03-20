@@ -1,0 +1,35 @@
+root = true
+
+[*.{cpp,hpp,h,cxx,hh,cc}]
+charset = utf-8
+end_of_line = crlf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 120
+
+# C/C++ specific rules
+[*.{cpp,cxx,cc,h,hpp,hh}]
+# prefer Unix-style newlines inside source but keep CRLF for Visual Studio compatibility
+end_of_line = crlf
+indent_style = space
+indent_size = 4
+
+[*.md]
+trim_trailing_whitespace = false
+insert_final_newline = true
+
+[*.{json,xml,cmake}]
+indent_style = space
+indent_size = 2
+
+# Binary files
+[*.png]
+trim_trailing_whitespace = false
+insert_final_newline = false
+
+# Visual Studio files keep CRLF
+[*.{sln,vcxproj,filters}]
+end_of_line = crlf
+charset = utf-8

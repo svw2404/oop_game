@@ -6,6 +6,7 @@
 #include "Util/Renderer.hpp"
 #include "Character.hpp"
 #include "BackgroundImage.hpp"
+#include "HeadBodyCharacter.hpp"
 
 class App {
 public:
@@ -48,7 +49,7 @@ private:
     Util::Renderer m_Root;
 
     std::shared_ptr<BackgroundImage> m_Background;
-    std::shared_ptr<Character> m_Fireboy;
+    std::shared_ptr<HeadBodyCharacter> m_Fireboy;
     std::shared_ptr<Character> m_Diamond;
 
     glm::vec2 m_FireboyVelocity = { 0.0f, 0.0f };

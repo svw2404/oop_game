@@ -17,12 +17,3 @@ void Character::SetImage(const std::string& ImagePath) {
         image->SetSize(m_Size);
     }
 }
-
-void Character::SetSize(const glm::vec2& size) {
-    m_Size = size;
-
-    auto image = std::dynamic_pointer_cast<Util::Image>(m_Drawable);
-    if (image) {
-        image->SetSize(size);
-    }
-}

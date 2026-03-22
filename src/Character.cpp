@@ -1,19 +1,27 @@
 #include "Character.hpp"
+
 #include "Util/Image.hpp"
 
-Character::Character(const std::string& ImagePath, bool skipSetImage) {
-    if (!skipSetImage && !ImagePath.empty()) {
-        this->SetImage(ImagePath);
+Character::Character(const std::string& imagePath, bool skipSetImage) {
+    if (!skipSetImage && !imagePath.empty()) {
+        SetImage(imagePath);
     }
-    this->ResetPosition();
+    ResetPosition();
 }
 
-void Character::SetImage(const std::string& ImagePath) {
-    m_ImagePath = ImagePath;
+void Character::SetImage(const std::string& imagePath) {
+    m_ImagePath = imagePath;
     m_Drawable = std::make_shared<Util::Image>(m_ImagePath);
 
-    auto image = std::dynamic_pointer_cast<Util::Image>(m_Drawable);
-    if (image) {
+    if (auto image = std::dynamic_pointer_cast<Util::Image>(m_Drawable)) {
         image->SetSize(m_Size);
+    }
+}
+
+void Character::SetSize(const glm::vec2& size) {
+    m_Size = size;
+
+    if (auto image = std::dynamic_pointer_cast<Util::Image>(m_Drawable)) {
+        image->SetSize(size);
     }
 }

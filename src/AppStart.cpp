@@ -32,29 +32,96 @@ void App::Start() {
     // 3) 碰撞區塊（世界邊界 + 地形）
     // -------------------------------------------------------------------------
     m_SolidBlocks.clear();
+    m_Slopes.clear();
+    m_Hazards.clear();
 
     m_SolidBlocks.push_back(ImageRectToWorldRect(0.0f, 0.0f, 2380.0f, 45.0f));       // Roof
-    m_SolidBlocks.push_back(ImageRectToWorldRect(0.0f, 1715.0f, 2380.0f, 1760.0f));  // Floor
+    // Left floor segment before the two lower depressions. Keep this as index 1
+    // because spawn logic below expects m_SolidBlocks[1] to be floor.
+    m_SolidBlocks.push_back(ImageRectToWorldRect(0.0f, 1715.0f, 1107.0f, 1760.0f));  // Floor
     m_SolidBlocks.push_back(ImageRectToWorldRect(0.0f, 0.0f, 45.0f, 1760.0f));        // Left
     m_SolidBlocks.push_back(ImageRectToWorldRect(2335.0f, 0.0f, 2380.0f, 1760.0f));   // Right
 
     m_TestBlock = ImageRectToWorldRect(46.0f, 1466.0f, 784.0f, 1519.0f);
     m_SolidBlocks.push_back(m_TestBlock);
 
-    const std::vector<RectObject> perimeterBlocks = {
+    const std::vector<SolidRect> perimeterBlocks = {
+        // Flat floor between / after the two lower depressions.
+        ImageRectToWorldRect(1155.0f, 1743.0f, 1342.0f, 1760.0f),
+        ImageRectToWorldRect(1382.0f, 1712.0f, 1604.0f, 1760.0f),
+        ImageRectToWorldRect(1652.0f, 1743.0f, 1839.0f, 1760.0f),
+        ImageRectToWorldRect(1879.0f, 1712.0f, 2380.0f, 1760.0f),
+
         ImageRectToWorldRect(46.0f, 1216.0f, 426.0f, 1273.0f),
         ImageRectToWorldRect(481.0f, 1250.0f, 670.0f, 1273.0f),
         ImageRectToWorldRect(721.0f, 1223.0f, 1029.0f, 1273.0f),
-        ImageRectToWorldRect(901.0f, 1273.0f, 1160.0f, 1395.0f),
+
+        // Bridge into Slope 3 so there is no blank gap between the upper flat
+        // ledge and the diagonal ramp start.
+        ImageRectToWorldRect(1029.0f, 1223.0f, 1044.0f, 1273.0f),
+
+        // Slope 3 cleanup:
+        // keep the left plateau high, but lower the support under the diagonal.
+        ImageRectToWorldRect(901.0f, 1273.0f, 1044.0f, 1395.0f),
+        ImageRectToWorldRect(1044.0f, 1340.0f, 1160.0f, 1395.0f),
+
+        // Main middle platform before slope 4.
         ImageRectToWorldRect(1036.0f, 1340.0f, 1475.0f, 1395.0f),
-        ImageRectToWorldRect(1475.0f, 1342.0f, 1519.0f, 1395.0f),
-        ImageRectToWorldRect(1519.0f, 1372.0f, 1704.0f, 1395.0f),
-        ImageRectToWorldRect(1704.0f, 1342.0f, 1758.0f, 1395.0f),
-        ImageRectToWorldRect(1758.0f, 1342.0f, 2063.0f, 1393.0f),
-        ImageRectToWorldRect(2149.0f, 1578.0f, 2325.0f, 1704.0f),
-        ImageRectToWorldRect(2208.0f, 1525.0f, 2321.0f, 1578.0f),
+
+        // Wider transition cap into Slope 4. This prevents a fall-through when
+        // walking off the long middle platform and starting the next diagonal.
+        ImageRectToWorldRect(1475.0f, 1344.0f, 1494.0f, 1395.0f),
+
+        // Slope 4 cleanup:
+        // lower the under-slope support and delay the next flat top slightly.
+        ImageRectToWorldRect(1475.0f, 1378.0f, 1529.0f, 1395.0f),
+        ImageRectToWorldRect(1529.0f, 1372.0f, 1704.0f, 1395.0f),
+
+        // Wider transition cap into Slope 5 for the same reason.
+        ImageRectToWorldRect(1704.0f, 1374.0f, 1722.0f, 1395.0f),
+
+        // Slope 5 cleanup:
+        // lower the support under the slope, then start the upper flat top at the slope end.
+        ImageRectToWorldRect(1704.0f, 1374.0f, 1762.0f, 1395.0f),
+        ImageRectToWorldRect(1762.0f, 1342.0f, 2021.0f, 1393.0f),
+
+        // Wider transition cap into Slope 6 plus a lower support strip below.
+        ImageRectToWorldRect(2021.0f, 1344.0f, 2038.0f, 1399.0f),
+        ImageRectToWorldRect(2021.0f, 1393.0f, 2067.0f, 1399.0f),
+
+        // Slope 7 cleanup:
+        // keep support under most of the ramp, but stop it a little before the
+        // top endpoint so coming back down from the right does not hit a wall
+        // before entering the slope surface.
+        ImageRectToWorldRect(2138.0f, 1586.0f, 2188.0f, 1704.0f),
+        ImageRectToWorldRect(2197.0f, 1525.0f, 2325.0f, 1704.0f),
     };
     m_SolidBlocks.insert(m_SolidBlocks.end(), perimeterBlocks.begin(), perimeterBlocks.end());
+
+    m_Slopes = {
+        // Slope 1: leftmost upper-left small connector
+        {ImagePointToWorldPoint(422.0f, 1216.0f), ImagePointToWorldPoint(479.0f, 1250.0f)},
+        // Slope 2: upper-left small connector just right of Slope 1
+        {ImagePointToWorldPoint(670.0f, 1254.0f), ImagePointToWorldPoint(721.0f, 1225.0f)},
+        // Slope 3: middle-left long diagonal ramp
+        {ImagePointToWorldPoint(1044.0f, 1223.0f), ImagePointToWorldPoint(1155.0f, 1340.0f)},
+        // Slope 4: center small connector
+        {ImagePointToWorldPoint(1477.0f, 1344.0f), ImagePointToWorldPoint(1529.0f, 1378.0f)},
+        // Slope 5: middle-right small connector
+        {ImagePointToWorldPoint(1712.0f, 1374.0f), ImagePointToWorldPoint(1762.0f, 1344.0f)},
+        // Slope 6: rightmost lower connector
+        {ImagePointToWorldPoint(2021.0f, 1344.0f), ImagePointToWorldPoint(2067.0f, 1397.0f)},
+        // Slope 7: uppermost top-right raised block ramp
+        {ImagePointToWorldPoint(2138.0f, 1586.0f), ImagePointToWorldPoint(2197.0f, 1525.0f)},
+        // Slope 8: lower-left depression left wall
+        {ImagePointToWorldPoint(1107.0f, 1714.0f), ImagePointToWorldPoint(1155.0f, 1743.0f)},
+        // Slope 9: lower-left depression right wall
+        {ImagePointToWorldPoint(1342.0f, 1747.0f), ImagePointToWorldPoint(1382.0f, 1714.0f)},
+        // Slope 10: lower-right depression left wall
+        {ImagePointToWorldPoint(1604.0f, 1712.0f), ImagePointToWorldPoint(1652.0f, 1741.0f)},
+        // Slope 11: lower-right depression right wall
+        {ImagePointToWorldPoint(1839.0f, 1745.0f), ImagePointToWorldPoint(1879.0f, 1712.0f)},
+    };
 
     // -------------------------------------------------------------------------
     // 4) Fireboy
@@ -128,8 +195,8 @@ void App::Start() {
         m_Fireboy->SetIdleState(true);
 
         if (m_SolidBlocks.size() >= 3) {
-            const RectObject& floor = m_SolidBlocks[1];
-            const RectObject& leftWall = m_SolidBlocks[2];
+            const SolidRect& floor = m_SolidBlocks[1];
+            const SolidRect& leftWall = m_SolidBlocks[2];
 
             const float floorTop = floor.center.y + (floor.size.y * 0.5f);
             const float wallRight = leftWall.center.x + (leftWall.size.x * 0.5f);

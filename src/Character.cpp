@@ -1,5 +1,6 @@
 #include "Character.hpp"
 
+#include "Util/Animation.hpp"
 #include "Util/Image.hpp"
 
 Character::Character(const std::string& imagePath, bool skipSetImage) {
@@ -23,5 +24,10 @@ void Character::SetSize(const glm::vec2& size) {
 
     if (auto image = std::dynamic_pointer_cast<Util::Image>(m_Drawable)) {
         image->SetSize(size);
+        return;
+    }
+
+    if (auto animation = std::dynamic_pointer_cast<Util::Animation>(m_Drawable)) {
+        animation->SetSize(size);
     }
 }

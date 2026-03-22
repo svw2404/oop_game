@@ -6,6 +6,7 @@
 #include "BackgroundImage.hpp"
 #include "Character.hpp"
 #include "HeadBodyCharacter.hpp"
+#include "LevelGeometry.hpp"
 #include "Util/Renderer.hpp"
 
 class App {
@@ -34,12 +35,8 @@ private:
     // ------------------------------------------------------------------------
     // Collision helpers
     // ------------------------------------------------------------------------
-    struct RectObject {
-        glm::vec2 center = {0.0f, 0.0f};
-        glm::vec2 size = {0.0f, 0.0f};
-    };
-
-    RectObject ImageRectToWorldRect(float x1, float y1, float x2, float y2) const;
+    SolidRect ImageRectToWorldRect(float x1, float y1, float x2, float y2) const;
+    glm::vec2 ImagePointToWorldPoint(float x, float y) const;
 
     bool CheckAABB(
         const glm::vec2& centerA, const glm::vec2& sizeA,
@@ -48,6 +45,15 @@ private:
 
     void ResolveHorizontalCollisions(const glm::vec2& oldPos, glm::vec2& newPos);
     void ResolveVerticalCollisions(const glm::vec2& oldPos, glm::vec2& newPos);
+    bool ResolveSlopeGrounding(const glm::vec2& oldPos, glm::vec2& newPos);
+    bool TrySnapToSlopeTopTransition(
+        const glm::vec2& oldPos,
+        glm::vec2& newPos,
+        const SolidRect& blockingBlock
+    ) const;
+    bool FindBestSlopeYAtX(const glm::vec2& oldPos, float desiredX, float& outSlopeY) const;
+    void ApplySlopeFollow(const glm::vec2& oldPos, glm::vec2& newPos) const;
+    bool FindNearbyGroundY(const glm::vec2& pos, float maxDistance, float& outGroundY) const;
 
     // 保留：舊任務檢查
     void ValidTask();
@@ -75,6 +81,13 @@ private:
     float m_MoveSpeed = 4.0f;
     float m_JumpSpeed = 14.0f;
     float m_Gravity = 0.7f;
+    float m_GroundSnapTolerance = 4.0f;
+    float m_GroundStickTolerance = 10.0f;
+    float m_SlopeSnapTolerance = 8.0f;
+    float m_StepUpHeight = 12.0f;
+    float m_SlopeTopTransitionHeight = 28.0f;
+    float m_SlopeFollowTolerance = 20.0f;
+    float m_SlopeTopTransitionWidth = 18.0f;
 
     // ------------------------------------------------------------------------
     // Gameplay sizes
@@ -88,8 +101,10 @@ private:
     // ------------------------------------------------------------------------
     // Collision geometry
     // ------------------------------------------------------------------------
-    std::vector<RectObject> m_SolidBlocks;
-    RectObject m_TestBlock;
+    std::vector<SolidRect> m_SolidBlocks;
+    std::vector<SlopeSurface> m_Slopes;
+    std::vector<HazardRect> m_Hazards;
+    SolidRect m_TestBlock;
 };
 
 #endif // APP_HPP

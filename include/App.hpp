@@ -54,7 +54,6 @@ private:
     bool FindBestSlopeYAtX(const glm::vec2& oldPos, float desiredX, float& outSlopeY) const;
     void ApplySlopeFollow(const glm::vec2& oldPos, glm::vec2& newPos) const;
     bool FindNearbyGroundY(const glm::vec2& pos, float maxDistance, float& outGroundY) const;
-
     // 保留：舊任務檢查
     void ValidTask();
 

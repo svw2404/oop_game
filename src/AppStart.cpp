@@ -52,6 +52,48 @@ void App::Start() {
         ImageRectToWorldRect(1652.0f, 1743.0f, 1839.0f, 1760.0f),
         ImageRectToWorldRect(1879.0f, 1712.0f, 2380.0f, 1760.0f),
 
+        // High upper block:
+        // preserve the stepped/slope top silhouette, but keep the lower edge
+        // simplified as support mass so collision stays stable.
+        ImageRectToWorldRect(55.0f, 423.0f, 355.0f, 723.0f),
+        ImageRectToWorldRect(351.0f, 672.0f, 426.0f, 723.0f),
+        ImageRectToWorldRect(426.0f, 708.0f, 483.0f, 723.0f),
+        ImageRectToWorldRect(483.0f, 704.0f, 668.0f, 723.0f),
+        ImageRectToWorldRect(668.0f, 704.0f, 712.0f, 723.0f),
+        ImageRectToWorldRect(712.0f, 664.0f, 1141.0f, 723.0f),
+        ImageRectToWorldRect(1139.0f, 639.0f, 1187.0f, 723.0f),
+        ImageRectToWorldRect(1183.0f, 605.0f, 1216.0f, 723.0f),
+        ImageRectToWorldRect(1220.0f, 546.0f, 1641.0f, 723.0f),
+        ImageRectToWorldRect(1641.0f, 670.0f, 1771.0f, 723.0f),
+        ImageRectToWorldRect(1771.0f, 670.0f, 2069.0f, 788.0f),
+
+        // Upper bridge block:
+        // map the clear top silhouette as flats + slopes and keep the hanging
+        // lower notch as support mass only.
+        ImageRectToWorldRect(594.0f, 299.0f, 643.0f, 423.0f),
+        ImageRectToWorldRect(643.0f, 236.0f, 784.0f, 423.0f),
+        ImageRectToWorldRect(784.0f, 303.0f, 851.0f, 423.0f),
+        ImageRectToWorldRect(851.0f, 301.0f, 914.0f, 423.0f),
+        ImageRectToWorldRect(914.0f, 357.0f, 958.0f, 423.0f),
+        ImageRectToWorldRect(958.0f, 357.0f, 1031.0f, 423.0f),
+        ImageRectToWorldRect(729.0f, 423.0f, 1027.0f, 544.0f),
+        ImageRectToWorldRect(1031.0f, 362.0f, 1536.0f, 423.0f),
+        ImageRectToWorldRect(1536.0f, 395.0f, 1588.0f, 423.0f),
+        ImageRectToWorldRect(1588.0f, 393.0f, 1771.0f, 423.0f),
+        ImageRectToWorldRect(1771.0f, 393.0f, 1832.0f, 423.0f),
+        ImageRectToWorldRect(1832.0f, 362.0f, 2319.0f, 423.0f),
+
+        // Upper mega-platform block:
+        // keep the walkable top as flats + explicit slopes, and use broad
+        // support rectangles underneath so the shape behaves as one solid mass.
+        ImageRectToWorldRect(300.0f, 912.0f, 1220.0f, 964.0f),
+        ImageRectToWorldRect(1220.0f, 973.0f, 1275.0f, 1032.0f),
+        ImageRectToWorldRect(1275.0f, 973.0f, 1468.0f, 1032.0f),
+        ImageRectToWorldRect(1468.0f, 1015.0f, 1527.0f, 1032.0f),
+        ImageRectToWorldRect(1527.0f, 1013.0f, 1712.0f, 1032.0f),
+        ImageRectToWorldRect(1712.0f, 1013.0f, 1767.0f, 1032.0f),
+        ImageRectToWorldRect(1767.0f, 973.0f, 2321.0f, 1216.0f),
+
         ImageRectToWorldRect(46.0f, 1216.0f, 426.0f, 1273.0f),
         ImageRectToWorldRect(481.0f, 1250.0f, 670.0f, 1273.0f),
         ImageRectToWorldRect(721.0f, 1223.0f, 1029.0f, 1273.0f),
@@ -121,6 +163,28 @@ void App::Start() {
         {ImagePointToWorldPoint(1604.0f, 1712.0f), ImagePointToWorldPoint(1652.0f, 1741.0f)},
         // Slope 11: lower-right depression right wall
         {ImagePointToWorldPoint(1839.0f, 1745.0f), ImagePointToWorldPoint(1879.0f, 1712.0f)},
+        // Slope 12: upper mega-platform left connector
+        {ImagePointToWorldPoint(1220.0f, 912.0f), ImagePointToWorldPoint(1275.0f, 973.0f)},
+        // Slope 13: upper mega-platform middle connector
+        {ImagePointToWorldPoint(1468.0f, 977.0f), ImagePointToWorldPoint(1527.0f, 1015.0f)},
+        // Slope 14: upper mega-platform right connector
+        {ImagePointToWorldPoint(1712.0f, 1013.0f), ImagePointToWorldPoint(1767.0f, 975.0f)},
+        // Slope 15: high upper block left-middle dip
+        {ImagePointToWorldPoint(426.0f, 672.0f), ImagePointToWorldPoint(483.0f, 708.0f)},
+        // Slope 16: high upper block middle rise
+        {ImagePointToWorldPoint(668.0f, 704.0f), ImagePointToWorldPoint(712.0f, 670.0f)},
+        // Slope 17: high upper block long right descent
+        {ImagePointToWorldPoint(1641.0f, 546.0f), ImagePointToWorldPoint(1771.0f, 670.0f)},
+        // Slope 18: upper bridge left rise
+        {ImagePointToWorldPoint(594.0f, 299.0f), ImagePointToWorldPoint(643.0f, 236.0f)},
+        // Slope 19: upper bridge left-center drop
+        {ImagePointToWorldPoint(784.0f, 238.0f), ImagePointToWorldPoint(851.0f, 303.0f)},
+        // Slope 20: upper bridge middle drop
+        {ImagePointToWorldPoint(914.0f, 301.0f), ImagePointToWorldPoint(958.0f, 357.0f)},
+        // Slope 21: upper bridge right-center drop
+        {ImagePointToWorldPoint(1536.0f, 366.0f), ImagePointToWorldPoint(1588.0f, 395.0f)},
+        // Slope 22: upper bridge right rise
+        {ImagePointToWorldPoint(1771.0f, 393.0f), ImagePointToWorldPoint(1832.0f, 364.0f)},
     };
 
     // -------------------------------------------------------------------------

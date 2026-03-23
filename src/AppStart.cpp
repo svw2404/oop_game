@@ -17,7 +17,6 @@ void App::Start() {
     // -------------------------------------------------------------------------
     m_BackgroundOriginalSize = {2380.0f, 1760.0f};
     m_BackgroundDisplayedSize = {1244.16f, 699.84f};
-    m_FireboyHitboxSize = {25.0f, 30.0f};
 
     // -------------------------------------------------------------------------
     // 2) 背景
@@ -33,6 +32,7 @@ void App::Start() {
     // -------------------------------------------------------------------------
     m_SolidBlocks.clear();
     m_Slopes.clear();
+    m_CeilingSlopes.clear();
     m_Hazards.clear();
 
     m_SolidBlocks.push_back(ImageRectToWorldRect(0.0f, 0.0f, 2380.0f, 45.0f));       // Roof
@@ -48,51 +48,60 @@ void App::Start() {
     const std::vector<SolidRect> perimeterBlocks = {
         // Flat floor between / after the two lower depressions.
         ImageRectToWorldRect(1155.0f, 1743.0f, 1342.0f, 1760.0f),
-        ImageRectToWorldRect(1382.0f, 1712.0f, 1604.0f, 1760.0f),
+        ImageRectToWorldRect(1382.0f, 1714.0f, 1392.0f, 1760.0f),
+        ImageRectToWorldRect(1390.0f, 1712.0f, 1594.0f, 1760.0f),
+        ImageRectToWorldRect(1592.0f, 1714.0f, 1604.0f, 1760.0f),
         ImageRectToWorldRect(1652.0f, 1743.0f, 1839.0f, 1760.0f),
-        ImageRectToWorldRect(1879.0f, 1712.0f, 2380.0f, 1760.0f),
+        ImageRectToWorldRect(1879.0f, 1714.0f, 1889.0f, 1760.0f),
+        ImageRectToWorldRect(1887.0f, 1712.0f, 2380.0f, 1760.0f),
 
         // High upper block:
         // preserve the stepped/slope top silhouette, but keep the lower edge
         // simplified as support mass so collision stays stable.
         ImageRectToWorldRect(55.0f, 423.0f, 355.0f, 723.0f),
         ImageRectToWorldRect(351.0f, 672.0f, 426.0f, 723.0f),
-        ImageRectToWorldRect(426.0f, 708.0f, 483.0f, 723.0f),
+        ImageRectToWorldRect(426.0f, 708.0f, 483.0f, 723.0f, false),
         ImageRectToWorldRect(483.0f, 704.0f, 668.0f, 723.0f),
-        ImageRectToWorldRect(668.0f, 704.0f, 712.0f, 723.0f),
+        ImageRectToWorldRect(668.0f, 704.0f, 712.0f, 723.0f, false),
         ImageRectToWorldRect(712.0f, 664.0f, 1141.0f, 723.0f),
         ImageRectToWorldRect(1139.0f, 639.0f, 1187.0f, 723.0f),
         ImageRectToWorldRect(1183.0f, 605.0f, 1216.0f, 723.0f),
         ImageRectToWorldRect(1220.0f, 546.0f, 1641.0f, 723.0f),
-        ImageRectToWorldRect(1641.0f, 670.0f, 1771.0f, 723.0f),
+        ImageRectToWorldRect(1641.0f, 670.0f, 1771.0f, 723.0f, false),
         ImageRectToWorldRect(1771.0f, 670.0f, 2069.0f, 788.0f),
 
         // Upper bridge block:
         // map the clear top silhouette as flats + slopes and keep the hanging
         // lower notch as support mass only.
-        ImageRectToWorldRect(594.0f, 299.0f, 643.0f, 423.0f),
-        ImageRectToWorldRect(643.0f, 236.0f, 784.0f, 423.0f),
-        ImageRectToWorldRect(784.0f, 303.0f, 851.0f, 423.0f),
+        ImageRectToWorldRect(594.0f, 299.0f, 643.0f, 423.0f, false),
+        ImageRectToWorldRect(643.0f, 236.0f, 784.0f, 423.0f, false),
+        ImageRectToWorldRect(784.0f, 303.0f, 851.0f, 423.0f, false),
         ImageRectToWorldRect(851.0f, 301.0f, 914.0f, 423.0f),
-        ImageRectToWorldRect(914.0f, 357.0f, 958.0f, 423.0f),
+        ImageRectToWorldRect(914.0f, 357.0f, 958.0f, 423.0f, false),
         ImageRectToWorldRect(958.0f, 357.0f, 1031.0f, 423.0f),
         ImageRectToWorldRect(729.0f, 423.0f, 1027.0f, 544.0f),
         ImageRectToWorldRect(1031.0f, 362.0f, 1536.0f, 423.0f),
-        ImageRectToWorldRect(1536.0f, 395.0f, 1588.0f, 423.0f),
+        ImageRectToWorldRect(1536.0f, 395.0f, 1588.0f, 423.0f, false),
         ImageRectToWorldRect(1588.0f, 393.0f, 1771.0f, 423.0f),
-        ImageRectToWorldRect(1771.0f, 393.0f, 1832.0f, 423.0f),
+        ImageRectToWorldRect(1771.0f, 393.0f, 1832.0f, 423.0f, false),
         ImageRectToWorldRect(1832.0f, 362.0f, 2319.0f, 423.0f),
 
         // Upper mega-platform block:
         // keep the walkable top as flats + explicit slopes, and use broad
         // support rectangles underneath so the shape behaves as one solid mass.
-        ImageRectToWorldRect(300.0f, 912.0f, 1220.0f, 964.0f),
-        ImageRectToWorldRect(1220.0f, 973.0f, 1275.0f, 1032.0f),
+        ImageRectToWorldRect(300.0f, 912.0f, 1097.0f, 964.0f),
+        ImageRectToWorldRect(1097.0f, 912.0f, 1151.0f, 1030.0f, false),
+        ImageRectToWorldRect(1151.0f, 912.0f, 1220.0f, 1032.0f),
+        ImageRectToWorldRect(1220.0f, 973.0f, 1275.0f, 1032.0f, false),
         ImageRectToWorldRect(1275.0f, 973.0f, 1468.0f, 1032.0f),
-        ImageRectToWorldRect(1468.0f, 1015.0f, 1527.0f, 1032.0f),
+        ImageRectToWorldRect(1468.0f, 1015.0f, 1527.0f, 1032.0f, false),
         ImageRectToWorldRect(1527.0f, 1013.0f, 1712.0f, 1032.0f),
-        ImageRectToWorldRect(1712.0f, 1013.0f, 1767.0f, 1032.0f),
-        ImageRectToWorldRect(1767.0f, 973.0f, 2321.0f, 1216.0f),
+        ImageRectToWorldRect(1712.0f, 1013.0f, 1767.0f, 1032.0f, false),
+        ImageRectToWorldRect(1767.0f, 973.0f, 1958.0f, 1032.0f),
+        ImageRectToWorldRect(1958.0f, 973.0f, 2014.0f, 1090.0f, false),
+        ImageRectToWorldRect(2014.0f, 973.0f, 2082.0f, 1093.0f),
+        ImageRectToWorldRect(2082.0f, 973.0f, 2193.0f, 1214.0f, false),
+        ImageRectToWorldRect(2193.0f, 973.0f, 2321.0f, 1216.0f),
 
         ImageRectToWorldRect(46.0f, 1216.0f, 426.0f, 1273.0f),
         ImageRectToWorldRect(481.0f, 1250.0f, 670.0f, 1273.0f),
@@ -104,38 +113,40 @@ void App::Start() {
 
         // Slope 3 cleanup:
         // keep the left plateau high, but lower the support under the diagonal.
-        ImageRectToWorldRect(901.0f, 1273.0f, 1044.0f, 1395.0f),
-        ImageRectToWorldRect(1044.0f, 1340.0f, 1160.0f, 1395.0f),
+        ImageRectToWorldRect(901.0f, 1273.0f, 910.0f, 1395.0f),
+        ImageRectToWorldRect(910.0f, 1273.0f, 1032.0f, 1399.0f, false),
+        ImageRectToWorldRect(1032.0f, 1273.0f, 1044.0f, 1395.0f),
+        ImageRectToWorldRect(1044.0f, 1340.0f, 1160.0f, 1395.0f, false),
 
         // Main middle platform before slope 4.
         ImageRectToWorldRect(1036.0f, 1340.0f, 1475.0f, 1395.0f),
 
         // Wider transition cap into Slope 4. This prevents a fall-through when
         // walking off the long middle platform and starting the next diagonal.
-        ImageRectToWorldRect(1475.0f, 1344.0f, 1494.0f, 1395.0f),
+        ImageRectToWorldRect(1475.0f, 1344.0f, 1494.0f, 1395.0f, false),
 
         // Slope 4 cleanup:
         // lower the under-slope support and delay the next flat top slightly.
-        ImageRectToWorldRect(1475.0f, 1378.0f, 1529.0f, 1395.0f),
+        ImageRectToWorldRect(1475.0f, 1378.0f, 1529.0f, 1395.0f, false),
         ImageRectToWorldRect(1529.0f, 1372.0f, 1704.0f, 1395.0f),
 
         // Wider transition cap into Slope 5 for the same reason.
-        ImageRectToWorldRect(1704.0f, 1374.0f, 1722.0f, 1395.0f),
+        ImageRectToWorldRect(1704.0f, 1374.0f, 1722.0f, 1395.0f, false),
 
         // Slope 5 cleanup:
         // lower the support under the slope, then start the upper flat top at the slope end.
-        ImageRectToWorldRect(1704.0f, 1374.0f, 1762.0f, 1395.0f),
+        ImageRectToWorldRect(1704.0f, 1374.0f, 1762.0f, 1395.0f, false),
         ImageRectToWorldRect(1762.0f, 1342.0f, 2021.0f, 1393.0f),
 
         // Wider transition cap into Slope 6 plus a lower support strip below.
-        ImageRectToWorldRect(2021.0f, 1344.0f, 2038.0f, 1399.0f),
-        ImageRectToWorldRect(2021.0f, 1393.0f, 2067.0f, 1399.0f),
+        ImageRectToWorldRect(2021.0f, 1344.0f, 2038.0f, 1399.0f, false),
+        ImageRectToWorldRect(2021.0f, 1393.0f, 2067.0f, 1399.0f, false),
 
         // Slope 7 cleanup:
         // keep support under most of the ramp, but stop it a little before the
         // top endpoint so coming back down from the right does not hit a wall
         // before entering the slope surface.
-        ImageRectToWorldRect(2138.0f, 1586.0f, 2188.0f, 1704.0f),
+        ImageRectToWorldRect(2138.0f, 1586.0f, 2188.0f, 1704.0f, false),
         ImageRectToWorldRect(2197.0f, 1525.0f, 2325.0f, 1704.0f),
     };
     m_SolidBlocks.insert(m_SolidBlocks.end(), perimeterBlocks.begin(), perimeterBlocks.end());
@@ -185,6 +196,15 @@ void App::Start() {
         {ImagePointToWorldPoint(1536.0f, 366.0f), ImagePointToWorldPoint(1588.0f, 395.0f)},
         // Slope 22: upper bridge right rise
         {ImagePointToWorldPoint(1771.0f, 393.0f), ImagePointToWorldPoint(1832.0f, 364.0f)},
+    };
+
+    m_CeilingSlopes = {
+        {ImagePointToWorldPoint(660.0f, 297.0f), ImagePointToWorldPoint(729.0f, 360.0f)},
+        {ImagePointToWorldPoint(1704.0f, 722.0f), ImagePointToWorldPoint(1762.0f, 781.0f)},
+        {ImagePointToWorldPoint(1097.0f, 969.0f), ImagePointToWorldPoint(1151.0f, 1030.0f)},
+        {ImagePointToWorldPoint(1958.0f, 1034.0f), ImagePointToWorldPoint(2014.0f, 1090.0f)},
+        {ImagePointToWorldPoint(2082.0f, 1095.0f), ImagePointToWorldPoint(2193.0f, 1214.0f)},
+        {ImagePointToWorldPoint(910.0f, 1285.0f), ImagePointToWorldPoint(1027.0f, 1398.0f)},
     };
 
     // -------------------------------------------------------------------------
@@ -250,9 +270,11 @@ void App::Start() {
         m_Fireboy = std::make_shared<HeadBodyCharacter>(
             moveBodyPaths, runHeadPaths, 10.0f, 120, true, 120, true
         );
-        m_Fireboy->SetSize({50.0f, 60.0f});
-        m_Fireboy->SetHeadScale(1.25f);
+        m_Fireboy->SetSize({36.0f, 43.0f});
+        m_Fireboy->SetHeadScale(1.25f / 1.4f);
+        m_Fireboy->SetBodySize({30.0f / 1.4f, 34.0f / 1.4f});
         m_Fireboy->SetHeadOffset({0.0f, -4.0f});
+        RecalculateFireboyCollisionBoxes();
 
         m_Fireboy->SetIdleBodyImage(bodyPaths.front());
         m_Fireboy->SetIdleHeadImage(idleHeadPaths, 120, true);
@@ -266,8 +288,10 @@ void App::Start() {
             const float wallRight = leftWall.center.x + (leftWall.size.x * 0.5f);
 
             glm::vec2 spawnPos;
-            spawnPos.x = wallRight + (m_FireboyHitboxSize.x * 0.5f) + 5.0f;
-            spawnPos.y = floorTop + (m_FireboyHitboxSize.y * 0.5f);
+            const float leftExtent = -GetFireboyLeftEdge({0.0f, 0.0f});
+            const float bodyBottom = GetFireboyBodyBottom({0.0f, 0.0f});
+            spawnPos.x = wallRight + leftExtent + 5.0f;
+            spawnPos.y = floorTop - bodyBottom;
 
             m_Fireboy->SetPosition(spawnPos);
             s_LastPos[m_Fireboy.get()] = spawnPos;
@@ -297,7 +321,13 @@ void App::Start() {
     m_FireboyOnGround = true;
 
     LOG_DEBUG("Background Size: {}x{}", m_BackgroundDisplayedSize.x, m_BackgroundDisplayedSize.y);
-    LOG_DEBUG("Fireboy Hitbox: {}x{}", m_FireboyHitboxSize.x, m_FireboyHitboxSize.y);
+    LOG_DEBUG(
+        "Fireboy Body Box: {}x{} Head Box: {}x{}",
+        m_FireboyBodyHitboxSize.x,
+        m_FireboyBodyHitboxSize.y,
+        m_FireboyHeadHitboxSize.x,
+        m_FireboyHeadHitboxSize.y
+    );
 
     m_CurrentState = State::UPDATE;
 }

@@ -32,16 +32,43 @@ void App::Update() {
 void App::HandleFireboyInput() {
     glm::vec2 oldPos = m_Fireboy->GetPosition();
     glm::vec2 newPos = oldPos;
+    float inputDir = 0.0f;
 
     if (Util::Input::IsKeyPressed(Util::Keycode::A)) {
-        newPos.x -= m_MoveSpeed;
-        m_Fireboy->SetScale({-1.0f, 1.0f});
+        inputDir -= 1.0f;
     }
 
     if (Util::Input::IsKeyPressed(Util::Keycode::D)) {
-        newPos.x += m_MoveSpeed;
+        inputDir += 1.0f;
+    }
+
+    if (inputDir < 0.0f) {
+        m_Fireboy->SetScale({-1.0f, 1.0f});
+    } else if (inputDir > 0.0f) {
         m_Fireboy->SetScale({1.0f, 1.0f});
     }
+
+    const float acceleration = m_FireboyOnGround ? m_GroundAcceleration : m_AirAcceleration;
+    const float deceleration = m_FireboyOnGround ? m_GroundDeceleration : m_AirDeceleration;
+
+    if (inputDir != 0.0f) {
+        const float targetSpeed = inputDir * m_MoveSpeed;
+        if (m_FireboyVelocity.x < targetSpeed) {
+            m_FireboyVelocity.x = std::min(targetSpeed, m_FireboyVelocity.x + acceleration);
+        } else if (m_FireboyVelocity.x > targetSpeed) {
+            m_FireboyVelocity.x = std::max(targetSpeed, m_FireboyVelocity.x - acceleration);
+        }
+    } else if (m_FireboyVelocity.x > 0.0f) {
+        m_FireboyVelocity.x = std::max(0.0f, m_FireboyVelocity.x - deceleration);
+    } else if (m_FireboyVelocity.x < 0.0f) {
+        m_FireboyVelocity.x = std::min(0.0f, m_FireboyVelocity.x + deceleration);
+    }
+
+    if (std::abs(m_FireboyVelocity.x) < 0.01f) {
+        m_FireboyVelocity.x = 0.0f;
+    }
+
+    newPos.x += m_FireboyVelocity.x;
 
     // Keep the player glued to slope surfaces while walking so the terrain
     // behaves like a real ramp instead of a staircase of tiny rectangles.
@@ -49,7 +76,11 @@ void App::HandleFireboyInput() {
         ApplySlopeFollow(oldPos, newPos);
     }
 
+    const float attemptedX = newPos.x;
     ResolveHorizontalCollisions(oldPos, newPos);
+    if (std::abs(newPos.x - attemptedX) > 0.001f) {
+        m_FireboyVelocity.x = 0.0f;
+    }
     if (newPos.x != oldPos.x && m_FireboyVelocity.y <= 0.0f) {
         ApplySlopeFollow(oldPos, newPos);
     }
@@ -77,38 +108,60 @@ void App::CheckDiamondCollection() {
         return;
     }
 
-    if (CheckAABB(
-            m_Fireboy->GetPosition(), m_FireboyHitboxSize,
-            m_Diamond->GetPosition(), m_DiamondHitboxSize)) {
+    glm::vec2 bodyCenter = {0.0f, 0.0f};
+    glm::vec2 bodySize = {0.0f, 0.0f};
+    glm::vec2 headCenter = {0.0f, 0.0f};
+    glm::vec2 headSize = {0.0f, 0.0f};
+    GetFireboyBodyBox(m_Fireboy->GetPosition(), bodyCenter, bodySize);
+    GetFireboyHeadBox(m_Fireboy->GetPosition(), headCenter, headSize);
+
+    if (CheckAABB(bodyCenter, bodySize, m_Diamond->GetPosition(), m_DiamondHitboxSize) ||
+        CheckAABB(headCenter, headSize, m_Diamond->GetPosition(), m_DiamondHitboxSize)) {
         m_Diamond->SetVisible(false);
     }
 }
 
 void App::ResolveHorizontalCollisions(const glm::vec2& oldPos, glm::vec2& newPos) {
     for (const auto& block : m_SolidBlocks) {
-        if (!CheckAABB(newPos, m_FireboyHitboxSize, block.center, block.size)) {
+        if (!CheckFireboyCollision(newPos, block)) {
             continue;
         }
 
-        const float oldRight = oldPos.x + m_FireboyHitboxSize.x * 0.5f;
-        const float oldLeft = oldPos.x - m_FireboyHitboxSize.x * 0.5f;
+        const float oldRight = GetFireboyRightEdge(oldPos);
+        const float oldLeft = GetFireboyLeftEdge(oldPos);
         const float blockLeft = block.center.x - block.size.x * 0.5f;
         const float blockRight = block.center.x + block.size.x * 0.5f;
         const float blockTop = block.center.y + block.size.y * 0.5f;
 
         auto canStepUp = [&](float targetTopY) {
-            const float raisedY = targetTopY + m_FireboyHitboxSize.y * 0.5f + 0.1f;
+            const glm::vec2 bodyOffset = m_FireboyBodyHitboxOffset;
+            const float raisedY = targetTopY - bodyOffset.y + m_FireboyBodyHitboxSize.y * 0.5f + 0.1f;
             const float liftAmount = raisedY - oldPos.y;
             if (liftAmount <= 0.0f || liftAmount > m_StepUpHeight) {
                 return false;
             }
 
             const glm::vec2 candidatePos = {newPos.x, raisedY};
+            glm::vec2 candidateBodyCenter = {0.0f, 0.0f};
+            glm::vec2 candidateBodySize = {0.0f, 0.0f};
+            GetFireboyBodyBox(candidatePos, candidateBodyCenter, candidateBodySize);
+            const float candidateBottom = candidateBodyCenter.y - candidateBodySize.y * 0.5f;
+
             for (const auto& other : m_SolidBlocks) {
                 if (&other == &block) {
                     continue;
                 }
-                if (CheckAABB(candidatePos, m_FireboyHitboxSize, other.center, other.size)) {
+
+                if (!CheckFireboyCollision(candidatePos, other)) {
+                    continue;
+                }
+
+                const float otherTop = other.center.y + other.size.y * 0.5f;
+                const bool isSupportContact =
+                    candidateBottom >= otherTop - m_GroundSnapTolerance &&
+                    candidateBottom <= otherTop + m_SlopeSnapTolerance;
+
+                if (!isSupportContact) {
                     return false;
                 }
             }
@@ -119,13 +172,15 @@ void App::ResolveHorizontalCollisions(const glm::vec2& oldPos, glm::vec2& newPos
 
         if (newPos.x > oldPos.x && oldRight <= blockLeft) {
             if (!canStepUp(blockTop) && !TrySnapToSlopeTopTransition(oldPos, newPos, block)) {
-                newPos.x = blockLeft - m_FireboyHitboxSize.x * 0.5f;
+                const float rightExtent = GetFireboyRightEdge({0.0f, 0.0f});
+                newPos.x = blockLeft - rightExtent;
             }
         }
 
         if (newPos.x < oldPos.x && oldLeft >= blockRight) {
             if (!canStepUp(blockTop) && !TrySnapToSlopeTopTransition(oldPos, newPos, block)) {
-                newPos.x = blockRight + m_FireboyHitboxSize.x * 0.5f;
+                const float leftExtent = -GetFireboyLeftEdge({0.0f, 0.0f});
+                newPos.x = blockRight + leftExtent;
             }
         }
     }
@@ -136,33 +191,73 @@ void App::ResolveVerticalCollisions(const glm::vec2& oldPos, glm::vec2& newPos) 
 
     bool foundGround = false;
     float bestGroundY = -std::numeric_limits<float>::infinity();
+    bool hitCeiling = false;
+
+    glm::vec2 oldBodyCenter = {0.0f, 0.0f};
+    glm::vec2 oldBodySize = {0.0f, 0.0f};
+    glm::vec2 newBodyCenter = {0.0f, 0.0f};
+    glm::vec2 newBodySize = {0.0f, 0.0f};
+    glm::vec2 oldHeadCenter = {0.0f, 0.0f};
+    glm::vec2 oldHeadSize = {0.0f, 0.0f};
+    GetFireboyBodyBox(oldPos, oldBodyCenter, oldBodySize);
+    GetFireboyBodyBox(newPos, newBodyCenter, newBodySize);
+    GetFireboyHeadBox(oldPos, oldHeadCenter, oldHeadSize);
 
     for (const auto& block : m_SolidBlocks) {
-        if (!CheckAABB(newPos, m_FireboyHitboxSize, block.center, block.size)) {
+        const bool bodyOverlap = CheckAABB(newBodyCenter, newBodySize, block.center, block.size);
+        glm::vec2 newHeadCenter = {0.0f, 0.0f};
+        glm::vec2 newHeadSize = {0.0f, 0.0f};
+        GetFireboyHeadBox(newPos, newHeadCenter, newHeadSize);
+        const bool headOverlap = CheckAABB(newHeadCenter, newHeadSize, block.center, block.size);
+        if (!bodyOverlap && !headOverlap) {
             continue;
         }
 
-        const float oldBottom = oldPos.y - m_FireboyHitboxSize.y * 0.5f;
-        const float oldTop = oldPos.y + m_FireboyHitboxSize.y * 0.5f;
-        const float newBottom = newPos.y - m_FireboyHitboxSize.y * 0.5f;
+        const float oldBottom = oldBodyCenter.y - oldBodySize.y * 0.5f;
+        const float oldTop = oldHeadCenter.y + oldHeadSize.y * 0.5f;
+        const float newBottom = newBodyCenter.y - newBodySize.y * 0.5f;
+        const float newTop = newHeadCenter.y + newHeadSize.y * 0.5f;
         const float blockTop = block.center.y + block.size.y * 0.5f;
         const float blockBottom = block.center.y - block.size.y * 0.5f;
 
-        if (m_FireboyVelocity.y <= 0.0f &&
+        if (bodyOverlap &&
+            m_FireboyVelocity.y <= 0.0f &&
             oldBottom >= blockTop - m_GroundSnapTolerance &&
             newBottom <= blockTop + m_GroundSnapTolerance) {
             if (!foundGround || blockTop > bestGroundY) {
                 bestGroundY = blockTop;
                 foundGround = true;
             }
-        } else if (m_FireboyVelocity.y > 0.0f && oldTop <= blockBottom) {
-            newPos.y = blockBottom - m_FireboyHitboxSize.y * 0.5f;
+        } else if (block.blockBottom &&
+                   headOverlap &&
+                   m_FireboyVelocity.y > 0.0f &&
+                   oldTop <= blockBottom + m_GroundSnapTolerance &&
+                   newTop >= blockBottom - m_GroundSnapTolerance) {
+            const float headTopOffset = m_FireboyHeadHitboxOffset.y + m_FireboyHeadHitboxSize.y * 0.5f;
+            newPos.y = blockBottom - headTopOffset;
             m_FireboyVelocity.y = 0.0f;
+            hitCeiling = true;
         }
     }
 
-    if (ResolveSlopeGrounding(oldPos, newPos)) {
-        const float slopeGroundY = newPos.y - m_FireboyHitboxSize.y * 0.5f;
+    if (!hitCeiling) {
+        hitCeiling = ResolveCeilingSlopeCollision(oldPos, newPos);
+    }
+
+    if (!hitCeiling && m_FireboyVelocity.y > 0.0f) {
+        float stickyCeilingY = 0.0f;
+        if (FindNearbyCeilingY(newPos, m_CeilingStickTolerance, stickyCeilingY)) {
+            newPos.y = stickyCeilingY - (m_FireboyHeadHitboxOffset.y + m_FireboyHeadHitboxSize.y * 0.5f);
+            m_FireboyVelocity.y = 0.0f;
+            hitCeiling = true;
+        }
+    }
+
+    if (!hitCeiling && ResolveSlopeGrounding(oldPos, newPos)) {
+        glm::vec2 groundedBodyCenter = {0.0f, 0.0f};
+        glm::vec2 groundedBodySize = {0.0f, 0.0f};
+        GetFireboyBodyBox(newPos, groundedBodyCenter, groundedBodySize);
+        const float slopeGroundY = groundedBodyCenter.y - groundedBodySize.y * 0.5f;
         if (!foundGround || slopeGroundY > bestGroundY) {
             bestGroundY = slopeGroundY;
             foundGround = true;
@@ -178,7 +273,7 @@ void App::ResolveVerticalCollisions(const glm::vec2& oldPos, glm::vec2& newPos) 
     }
 
     if (foundGround) {
-        newPos.y = bestGroundY + m_FireboyHitboxSize.y * 0.5f;
+        newPos.y = bestGroundY - m_FireboyBodyHitboxOffset.y + m_FireboyBodyHitboxSize.y * 0.5f;
         m_FireboyVelocity.y = 0.0f;
         m_FireboyOnGround = true;
     }
@@ -200,7 +295,7 @@ bool App::CheckAABB(
     return !(rightA < leftB || leftA > rightB || topA < bottomB || bottomA > topB);
 }
 
-SolidRect App::ImageRectToWorldRect(float x1, float y1, float x2, float y2) const {
+SolidRect App::ImageRectToWorldRect(float x1, float y1, float x2, float y2, bool blockBottom) const {
     const float scaleX = m_BackgroundDisplayedSize.x / m_BackgroundOriginalSize.x;
     const float scaleY = m_BackgroundDisplayedSize.y / m_BackgroundOriginalSize.y;
 
@@ -214,6 +309,7 @@ SolidRect App::ImageRectToWorldRect(float x1, float y1, float x2, float y2) cons
     rect.center.x = imageCenterX - (m_BackgroundDisplayedSize.x * 0.5f);
     rect.center.y = (m_BackgroundDisplayedSize.y * 0.5f) - imageCenterY;
     rect.size = {width, height};
+    rect.blockBottom = blockBottom;
     return rect;
 }
 
@@ -227,15 +323,106 @@ glm::vec2 App::ImagePointToWorldPoint(float x, float y) const {
     };
 }
 
+void App::RecalculateFireboyCollisionBoxes() {
+    if (!m_Fireboy) {
+        return;
+    }
+
+    const glm::vec2 bodySize = m_Fireboy->GetBodySize();
+    const glm::vec2 headSize = m_Fireboy->GetHeadSize();
+    const glm::vec2 headCenterOffset = m_Fireboy->GetHeadCenterOffset();
+
+    m_FireboyBodyHitboxSize = {
+        std::max(1.0f, bodySize.x * m_FireboyBodyHitboxScale.x - m_FireboyBodyHitboxPadding.x),
+        std::max(1.0f, bodySize.y * m_FireboyBodyHitboxScale.y - m_FireboyBodyHitboxPadding.y),
+    };
+    m_FireboyBodyHitboxOffset = {0.0f, -2.0f};
+
+    m_FireboyHeadHitboxSize = {
+        std::max(1.0f, headSize.x * m_FireboyHeadHitboxScale.x - m_FireboyHeadHitboxPadding.x),
+        std::max(1.0f, headSize.y * m_FireboyHeadHitboxScale.y - m_FireboyHeadHitboxPadding.y),
+    };
+    m_FireboyHeadHitboxOffset = headCenterOffset;
+}
+
+void App::GetFireboyBodyBox(const glm::vec2& bodyPos, glm::vec2& outCenter, glm::vec2& outSize) const {
+    outCenter = bodyPos + m_FireboyBodyHitboxOffset;
+    outSize = m_FireboyBodyHitboxSize;
+}
+
+void App::GetFireboyHeadBox(const glm::vec2& bodyPos, glm::vec2& outCenter, glm::vec2& outSize) const {
+    outCenter = bodyPos + m_FireboyHeadHitboxOffset;
+    outSize = m_FireboyHeadHitboxSize;
+}
+
+bool App::CheckFireboyCollision(const glm::vec2& bodyPos, const SolidRect& block) const {
+    glm::vec2 bodyCenter = {0.0f, 0.0f};
+    glm::vec2 bodySize = {0.0f, 0.0f};
+    glm::vec2 headCenter = {0.0f, 0.0f};
+    glm::vec2 headSize = {0.0f, 0.0f};
+    GetFireboyBodyBox(bodyPos, bodyCenter, bodySize);
+    GetFireboyHeadBox(bodyPos, headCenter, headSize);
+    return CheckAABB(bodyCenter, bodySize, block.center, block.size) ||
+           CheckAABB(headCenter, headSize, block.center, block.size);
+}
+
+float App::GetFireboyLeftEdge(const glm::vec2& bodyPos) const {
+    glm::vec2 bodyCenter = {0.0f, 0.0f};
+    glm::vec2 bodySize = {0.0f, 0.0f};
+    glm::vec2 headCenter = {0.0f, 0.0f};
+    glm::vec2 headSize = {0.0f, 0.0f};
+    GetFireboyBodyBox(bodyPos, bodyCenter, bodySize);
+    GetFireboyHeadBox(bodyPos, headCenter, headSize);
+    return std::min(
+        bodyCenter.x - bodySize.x * 0.5f,
+        headCenter.x - headSize.x * 0.5f
+    );
+}
+
+float App::GetFireboyRightEdge(const glm::vec2& bodyPos) const {
+    glm::vec2 bodyCenter = {0.0f, 0.0f};
+    glm::vec2 bodySize = {0.0f, 0.0f};
+    glm::vec2 headCenter = {0.0f, 0.0f};
+    glm::vec2 headSize = {0.0f, 0.0f};
+    GetFireboyBodyBox(bodyPos, bodyCenter, bodySize);
+    GetFireboyHeadBox(bodyPos, headCenter, headSize);
+    return std::max(
+        bodyCenter.x + bodySize.x * 0.5f,
+        headCenter.x + headSize.x * 0.5f
+    );
+}
+
+float App::GetFireboyHeadTop(const glm::vec2& bodyPos) const {
+    glm::vec2 headCenter = {0.0f, 0.0f};
+    glm::vec2 headSize = {0.0f, 0.0f};
+    GetFireboyHeadBox(bodyPos, headCenter, headSize);
+    return headCenter.y + headSize.y * 0.5f;
+}
+
+float App::GetFireboyBodyBottom(const glm::vec2& bodyPos) const {
+    glm::vec2 bodyCenter = {0.0f, 0.0f};
+    glm::vec2 bodySize = {0.0f, 0.0f};
+    GetFireboyBodyBox(bodyPos, bodyCenter, bodySize);
+    return bodyCenter.y - bodySize.y * 0.5f;
+}
+
 bool App::ResolveSlopeGrounding(const glm::vec2& oldPos, glm::vec2& newPos) {
     if (m_FireboyVelocity.y > 1.0f) {
         return false;
     }
 
-    const float oldBottom = oldPos.y - m_FireboyHitboxSize.y * 0.5f;
-    const float newBottom = newPos.y - m_FireboyHitboxSize.y * 0.5f;
-    const float leftFootX = newPos.x - m_FireboyHitboxSize.x * 0.35f;
-    const float rightFootX = newPos.x + m_FireboyHitboxSize.x * 0.35f;
+    glm::vec2 oldBodyCenter = {0.0f, 0.0f};
+    glm::vec2 oldBodySize = {0.0f, 0.0f};
+    glm::vec2 newBodyCenter = {0.0f, 0.0f};
+    glm::vec2 newBodySize = {0.0f, 0.0f};
+    GetFireboyBodyBox(oldPos, oldBodyCenter, oldBodySize);
+    GetFireboyBodyBox(newPos, newBodyCenter, newBodySize);
+
+    const float oldBottom = oldBodyCenter.y - oldBodySize.y * 0.5f;
+    const float newBottom = newBodyCenter.y - newBodySize.y * 0.5f;
+    const float footInset = std::min(m_FootProbeInset, newBodySize.x * 0.25f);
+    const float leftFootX = newBodyCenter.x - newBodySize.x * 0.5f + footInset;
+    const float rightFootX = newBodyCenter.x + newBodySize.x * 0.5f - footInset;
 
     bool foundSlope = false;
     float bestGroundY = -std::numeric_limits<float>::infinity();
@@ -246,7 +433,7 @@ bool App::ResolveSlopeGrounding(const glm::vec2& oldPos, glm::vec2& newPos) {
             continue;
         }
 
-        for (const float footX : {leftFootX, rightFootX}) {
+        for (const float footX : {leftFootX, newBodyCenter.x, rightFootX}) {
             const float minX = std::min(slope.start.x, slope.end.x) - m_SlopeSnapTolerance;
             const float maxX = std::max(slope.start.x, slope.end.x) + m_SlopeSnapTolerance;
             if (footX < minX || footX > maxX) {
@@ -278,9 +465,73 @@ bool App::ResolveSlopeGrounding(const glm::vec2& oldPos, glm::vec2& newPos) {
         return false;
     }
 
-    newPos.y = bestGroundY + m_FireboyHitboxSize.y * 0.5f;
+    newPos.y = bestGroundY - m_FireboyBodyHitboxOffset.y + m_FireboyBodyHitboxSize.y * 0.5f;
     m_FireboyVelocity.y = 0.0f;
     m_FireboyOnGround = true;
+    return true;
+}
+
+bool App::ResolveCeilingSlopeCollision(const glm::vec2& oldPos, glm::vec2& newPos) {
+    if (m_FireboyVelocity.y <= 0.0f) {
+        return false;
+    }
+
+    glm::vec2 oldHeadCenter = {0.0f, 0.0f};
+    glm::vec2 oldHeadSize = {0.0f, 0.0f};
+    glm::vec2 newHeadCenter = {0.0f, 0.0f};
+    glm::vec2 newHeadSize = {0.0f, 0.0f};
+    GetFireboyHeadBox(oldPos, oldHeadCenter, oldHeadSize);
+    GetFireboyHeadBox(newPos, newHeadCenter, newHeadSize);
+
+    const float oldTop = oldHeadCenter.y + oldHeadSize.y * 0.5f;
+    const float newTop = newHeadCenter.y + newHeadSize.y * 0.5f;
+    const float leftX = newHeadCenter.x - newHeadSize.x * 0.5f;
+    const float centerX = newHeadCenter.x;
+    const float rightX = newHeadCenter.x + newHeadSize.x * 0.5f;
+
+    bool foundCeiling = false;
+    float lowestCeilingY = std::numeric_limits<float>::infinity();
+
+    for (const auto& slope : m_CeilingSlopes) {
+        const glm::vec2 delta = slope.end - slope.start;
+        if (std::abs(delta.x) < 0.001f) {
+            continue;
+        }
+
+        for (const float sampleX : {leftX, centerX, rightX}) {
+            const float minX = std::min(slope.start.x, slope.end.x) - m_SlopeSnapTolerance;
+            const float maxX = std::max(slope.start.x, slope.end.x) + m_SlopeSnapTolerance;
+            if (sampleX < minX || sampleX > maxX) {
+                continue;
+            }
+
+            const float t = (sampleX - slope.start.x) / delta.x;
+            if (t < -0.15f || t > 1.15f) {
+                continue;
+            }
+
+            const float slopeY = slope.start.y + delta.y * t;
+            const bool crossesSlope =
+                oldTop <= slopeY + m_SlopeSnapTolerance &&
+                newTop >= slopeY - m_SlopeSnapTolerance;
+
+            if (!crossesSlope) {
+                continue;
+            }
+
+            if (!foundCeiling || slopeY < lowestCeilingY) {
+                lowestCeilingY = slopeY;
+                foundCeiling = true;
+            }
+        }
+    }
+
+    if (!foundCeiling) {
+        return false;
+    }
+
+    newPos.y = lowestCeilingY - (m_FireboyHeadHitboxOffset.y + m_FireboyHeadHitboxSize.y * 0.5f);
+    m_FireboyVelocity.y = 0.0f;
     return true;
 }
 
@@ -293,11 +544,22 @@ bool App::TrySnapToSlopeTopTransition(
         return false;
     }
 
+    glm::vec2 oldBodyCenter = {0.0f, 0.0f};
+    glm::vec2 oldBodySize = {0.0f, 0.0f};
+    glm::vec2 newBodyCenter = {0.0f, 0.0f};
+    glm::vec2 newBodySize = {0.0f, 0.0f};
+    GetFireboyBodyBox(oldPos, oldBodyCenter, oldBodySize);
+    GetFireboyBodyBox(newPos, newBodyCenter, newBodySize);
+
     const float direction = (newPos.x > oldPos.x) ? 1.0f : -1.0f;
     const float blockTop = blockingBlock.center.y + blockingBlock.size.y * 0.5f;
-    const float oldBottom = oldPos.y - m_FireboyHitboxSize.y * 0.5f;
-    const float frontFootOldX = oldPos.x + direction * m_FireboyHitboxSize.x * 0.35f;
-    const float frontFootNewX = newPos.x + direction * m_FireboyHitboxSize.x * 0.35f;
+    const float oldBottom = oldBodyCenter.y - oldBodySize.y * 0.5f;
+    const float oldFootInset = std::min(m_FootProbeInset, oldBodySize.x * 0.25f);
+    const float newFootInset = std::min(m_FootProbeInset, newBodySize.x * 0.25f);
+    const float frontFootOldX = oldBodyCenter.x + direction * (oldBodySize.x * 0.5f - oldFootInset);
+    const float frontFootNewX = newBodyCenter.x + direction * (newBodySize.x * 0.5f - newFootInset);
+    const float centerOldX = oldBodyCenter.x;
+    const float centerNewX = newBodyCenter.x;
 
     for (const auto& slope : m_Slopes) {
         const glm::vec2 upper = (slope.start.y >= slope.end.y) ? slope.start : slope.end;
@@ -314,11 +576,14 @@ bool App::TrySnapToSlopeTopTransition(
 
         const float transitionMinX = upper.x - m_SlopeTopTransitionWidth;
         const float transitionMaxX = upper.x + m_SlopeTopTransitionWidth;
-        const bool reachesTopZone =
+        const bool frontReachesTopZone =
             std::max(frontFootOldX, frontFootNewX) >= transitionMinX &&
             std::min(frontFootOldX, frontFootNewX) <= transitionMaxX;
+        const bool bodyReachesTopZone =
+            std::max(centerOldX, centerNewX) >= transitionMinX &&
+            std::min(centerOldX, centerNewX) <= transitionMaxX;
 
-        if (!reachesTopZone) {
+        if (!frontReachesTopZone && !bodyReachesTopZone) {
             continue;
         }
 
@@ -327,7 +592,7 @@ bool App::TrySnapToSlopeTopTransition(
             continue;
         }
 
-        newPos.y = upper.y + m_FireboyHitboxSize.y * 0.5f + 0.1f;
+        newPos.y = upper.y - m_FireboyBodyHitboxOffset.y + m_FireboyBodyHitboxSize.y * 0.5f + 0.1f;
         return true;
     }
 
@@ -335,9 +600,16 @@ bool App::TrySnapToSlopeTopTransition(
 }
 
 bool App::FindBestSlopeYAtX(const glm::vec2& oldPos, float desiredX, float& outSlopeY) const {
-    const float oldBottom = oldPos.y - m_FireboyHitboxSize.y * 0.5f;
-    const float leftFootX = desiredX - m_FireboyHitboxSize.x * 0.35f;
-    const float rightFootX = desiredX + m_FireboyHitboxSize.x * 0.35f;
+    glm::vec2 oldBodyCenter = {0.0f, 0.0f};
+    glm::vec2 oldBodySize = {0.0f, 0.0f};
+    GetFireboyBodyBox(oldPos, oldBodyCenter, oldBodySize);
+
+    const float centerOffsetX = oldBodyCenter.x - oldPos.x;
+    const float desiredBodyCenterX = desiredX + centerOffsetX;
+    const float oldBottom = oldBodyCenter.y - oldBodySize.y * 0.5f;
+    const float footInset = std::min(m_FootProbeInset, oldBodySize.x * 0.25f);
+    const float leftFootX = desiredBodyCenterX - oldBodySize.x * 0.5f + footInset;
+    const float rightFootX = desiredBodyCenterX + oldBodySize.x * 0.5f - footInset;
 
     bool foundSlope = false;
     float bestSlopeY = -std::numeric_limits<float>::infinity();
@@ -348,7 +620,7 @@ bool App::FindBestSlopeYAtX(const glm::vec2& oldPos, float desiredX, float& outS
             continue;
         }
 
-        for (const float footX : {leftFootX, rightFootX}) {
+        for (const float footX : {leftFootX, desiredBodyCenterX, rightFootX}) {
             const float minX = std::min(slope.start.x, slope.end.x) - m_SlopeTopTransitionWidth;
             const float maxX = std::max(slope.start.x, slope.end.x) + m_SlopeTopTransitionWidth;
             if (footX < minX || footX > maxX) {
@@ -388,13 +660,17 @@ void App::ApplySlopeFollow(const glm::vec2& oldPos, glm::vec2& newPos) const {
         return;
     }
 
-    newPos.y = bestSlopeY + m_FireboyHitboxSize.y * 0.5f;
+    newPos.y = bestSlopeY - m_FireboyBodyHitboxOffset.y + m_FireboyBodyHitboxSize.y * 0.5f;
 }
 
 bool App::FindNearbyGroundY(const glm::vec2& pos, float maxDistance, float& outGroundY) const {
-    const float left = pos.x - m_FireboyHitboxSize.x * 0.5f;
-    const float right = pos.x + m_FireboyHitboxSize.x * 0.5f;
-    const float feetY = pos.y - m_FireboyHitboxSize.y * 0.5f;
+    glm::vec2 bodyCenter = {0.0f, 0.0f};
+    glm::vec2 bodySize = {0.0f, 0.0f};
+    GetFireboyBodyBox(pos, bodyCenter, bodySize);
+
+    const float left = bodyCenter.x - bodySize.x * 0.5f;
+    const float right = bodyCenter.x + bodySize.x * 0.5f;
+    const float feetY = bodyCenter.y - bodySize.y * 0.5f;
 
     bool foundGround = false;
     float bestGroundY = -std::numeric_limits<float>::infinity();
@@ -402,7 +678,7 @@ bool App::FindNearbyGroundY(const glm::vec2& pos, float maxDistance, float& outG
     for (const auto& block : m_SolidBlocks) {
         const float blockLeft = block.center.x - block.size.x * 0.5f;
         const float blockRight = block.center.x + block.size.x * 0.5f;
-        if (right <= blockLeft || left >= blockRight) {
+        if (right <= blockLeft - m_FootProbeInset || left >= blockRight + m_FootProbeInset) {
             continue;
         }
 
@@ -430,5 +706,78 @@ bool App::FindNearbyGroundY(const glm::vec2& pos, float maxDistance, float& outG
     }
 
     outGroundY = bestGroundY;
+    return true;
+}
+
+bool App::FindNearbyCeilingY(const glm::vec2& pos, float maxDistance, float& outCeilingY) const {
+    glm::vec2 headCenter = {0.0f, 0.0f};
+    glm::vec2 headSize = {0.0f, 0.0f};
+    GetFireboyHeadBox(pos, headCenter, headSize);
+
+    const float left = headCenter.x - headSize.x * 0.5f;
+    const float centerX = headCenter.x;
+    const float right = headCenter.x + headSize.x * 0.5f;
+    const float headTop = headCenter.y + headSize.y * 0.5f;
+
+    bool foundCeiling = false;
+    float bestCeilingY = std::numeric_limits<float>::infinity();
+
+    for (const auto& block : m_SolidBlocks) {
+        if (!block.blockBottom) {
+            continue;
+        }
+
+        const float blockLeft = block.center.x - block.size.x * 0.5f;
+        const float blockRight = block.center.x + block.size.x * 0.5f;
+        if (right <= blockLeft - m_FootProbeInset || left >= blockRight + m_FootProbeInset) {
+            continue;
+        }
+
+        const float blockBottom = block.center.y - block.size.y * 0.5f;
+        if (std::abs(blockBottom - headTop) > maxDistance) {
+            continue;
+        }
+
+        if (!foundCeiling || blockBottom < bestCeilingY) {
+            bestCeilingY = blockBottom;
+            foundCeiling = true;
+        }
+    }
+
+    for (const auto& slope : m_CeilingSlopes) {
+        const glm::vec2 delta = slope.end - slope.start;
+        if (std::abs(delta.x) < 0.001f) {
+            continue;
+        }
+
+        for (const float sampleX : {left, centerX, right}) {
+            const float minX = std::min(slope.start.x, slope.end.x) - m_SlopeSnapTolerance;
+            const float maxX = std::max(slope.start.x, slope.end.x) + m_SlopeSnapTolerance;
+            if (sampleX < minX || sampleX > maxX) {
+                continue;
+            }
+
+            const float t = (sampleX - slope.start.x) / delta.x;
+            if (t < -0.15f || t > 1.15f) {
+                continue;
+            }
+
+            const float slopeY = slope.start.y + delta.y * t;
+            if (std::abs(slopeY - headTop) > maxDistance) {
+                continue;
+            }
+
+            if (!foundCeiling || slopeY < bestCeilingY) {
+                bestCeilingY = slopeY;
+                foundCeiling = true;
+            }
+        }
+    }
+
+    if (!foundCeiling) {
+        return false;
+    }
+
+    outCeilingY = bestCeilingY;
     return true;
 }

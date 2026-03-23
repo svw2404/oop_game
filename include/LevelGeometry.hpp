@@ -6,9 +6,15 @@
 struct SolidRect {
     glm::vec2 center = {0.0f, 0.0f};
     glm::vec2 size = {0.0f, 0.0f};
+    bool blockBottom = true;
 };
 
 struct SlopeSurface {
+    glm::vec2 start = {0.0f, 0.0f};
+    glm::vec2 end = {0.0f, 0.0f};
+};
+
+struct CeilingSlopeSurface {
     glm::vec2 start = {0.0f, 0.0f};
     glm::vec2 end = {0.0f, 0.0f};
 };

@@ -42,6 +42,7 @@ public:
 
     // 設定整體尺寸（body 為基準，head 依比例同步）
     void SetSize(const glm::vec2& size);
+    void SetBodySize(const glm::vec2& size);
 
     // 設定頭部相對 body 的偏移
     void SetHeadOffset(const glm::vec2& offset);
@@ -86,6 +87,10 @@ public:
 
     void SetPosition(const glm::vec2& pos);
     void SetScale(const glm::vec2& scale);
+
+    [[nodiscard]] glm::vec2 GetBodySize() const;
+    [[nodiscard]] glm::vec2 GetHeadSize() const;
+    [[nodiscard]] glm::vec2 GetHeadCenterOffset() const;
 
 private:
     // 重新計算 head 的相對位置

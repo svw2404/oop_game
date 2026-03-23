@@ -35,7 +35,13 @@ private:
     // ------------------------------------------------------------------------
     // Collision helpers
     // ------------------------------------------------------------------------
-    SolidRect ImageRectToWorldRect(float x1, float y1, float x2, float y2) const;
+    SolidRect ImageRectToWorldRect(
+        float x1,
+        float y1,
+        float x2,
+        float y2,
+        bool blockBottom = true
+    ) const;
     glm::vec2 ImagePointToWorldPoint(float x, float y) const;
 
     bool CheckAABB(
@@ -46,6 +52,7 @@ private:
     void ResolveHorizontalCollisions(const glm::vec2& oldPos, glm::vec2& newPos);
     void ResolveVerticalCollisions(const glm::vec2& oldPos, glm::vec2& newPos);
     bool ResolveSlopeGrounding(const glm::vec2& oldPos, glm::vec2& newPos);
+    bool ResolveCeilingSlopeCollision(const glm::vec2& oldPos, glm::vec2& newPos);
     bool TrySnapToSlopeTopTransition(
         const glm::vec2& oldPos,
         glm::vec2& newPos,
@@ -54,6 +61,15 @@ private:
     bool FindBestSlopeYAtX(const glm::vec2& oldPos, float desiredX, float& outSlopeY) const;
     void ApplySlopeFollow(const glm::vec2& oldPos, glm::vec2& newPos) const;
     bool FindNearbyGroundY(const glm::vec2& pos, float maxDistance, float& outGroundY) const;
+    bool FindNearbyCeilingY(const glm::vec2& pos, float maxDistance, float& outCeilingY) const;
+    void RecalculateFireboyCollisionBoxes();
+    void GetFireboyBodyBox(const glm::vec2& bodyPos, glm::vec2& outCenter, glm::vec2& outSize) const;
+    void GetFireboyHeadBox(const glm::vec2& bodyPos, glm::vec2& outCenter, glm::vec2& outSize) const;
+    bool CheckFireboyCollision(const glm::vec2& bodyPos, const SolidRect& block) const;
+    float GetFireboyLeftEdge(const glm::vec2& bodyPos) const;
+    float GetFireboyRightEdge(const glm::vec2& bodyPos) const;
+    float GetFireboyHeadTop(const glm::vec2& bodyPos) const;
+    float GetFireboyBodyBottom(const glm::vec2& bodyPos) const;
     // 保留：舊任務檢查
     void ValidTask();
 
@@ -77,22 +93,35 @@ private:
     glm::vec2 m_FireboyVelocity = {0.0f, 0.0f};
     bool m_FireboyOnGround = false;
 
-    float m_MoveSpeed = 4.0f;
-    float m_JumpSpeed = 14.0f;
-    float m_Gravity = 0.7f;
+    float m_MoveSpeed = 1.8f;
+    float m_GroundAcceleration = 0.10f;
+    float m_AirAcceleration = 0.05f;
+    float m_GroundDeceleration = 0.07f;
+    float m_AirDeceleration = 0.010f;
+    float m_JumpSpeed = 5.2f;
+    float m_Gravity = 0.11f;
     float m_GroundSnapTolerance = 4.0f;
-    float m_GroundStickTolerance = 10.0f;
-    float m_SlopeSnapTolerance = 8.0f;
-    float m_StepUpHeight = 12.0f;
-    float m_SlopeTopTransitionHeight = 28.0f;
+    float m_GroundStickTolerance = 14.0f;
+    float m_CeilingStickTolerance = 10.0f;
+    float m_SlopeSnapTolerance = 10.0f;
+    float m_StepUpHeight = 14.0f;
+    float m_SlopeTopTransitionHeight = 36.0f;
     float m_SlopeFollowTolerance = 20.0f;
-    float m_SlopeTopTransitionWidth = 18.0f;
+    float m_SlopeTopTransitionWidth = 24.0f;
+    float m_FootProbeInset = 2.0f;
 
     // ------------------------------------------------------------------------
     // Gameplay sizes
     // ------------------------------------------------------------------------
-    glm::vec2 m_FireboyHitboxSize = {25.0f, 30.0f};
+    glm::vec2 m_FireboyBodyHitboxSize = {30.0f, 50.0f};
+    glm::vec2 m_FireboyBodyHitboxOffset = {0.0f, -2.0f};
+    glm::vec2 m_FireboyHeadHitboxSize = {28.0f, 34.0f};
+    glm::vec2 m_FireboyHeadHitboxOffset = {0.0f, 40.0f};
     glm::vec2 m_DiamondHitboxSize = {16.0f, 16.0f};
+    glm::vec2 m_FireboyBodyHitboxScale = {0.72f, 0.90f};
+    glm::vec2 m_FireboyHeadHitboxScale = {0.60f, 0.60f};
+    glm::vec2 m_FireboyBodyHitboxPadding = {0.0f, 0.0f};
+    glm::vec2 m_FireboyHeadHitboxPadding = {0.0f, 0.0f};
 
     glm::vec2 m_BackgroundOriginalSize = {2380.0f, 1760.0f};
     glm::vec2 m_BackgroundDisplayedSize = {1244.16f, 699.84f};
@@ -102,6 +131,7 @@ private:
     // ------------------------------------------------------------------------
     std::vector<SolidRect> m_SolidBlocks;
     std::vector<SlopeSurface> m_Slopes;
+    std::vector<CeilingSlopeSurface> m_CeilingSlopes;
     std::vector<HazardRect> m_Hazards;
     SolidRect m_TestBlock;
 };

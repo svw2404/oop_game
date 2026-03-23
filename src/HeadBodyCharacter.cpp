@@ -110,6 +110,12 @@ void HeadBodyCharacter::SetSize(const glm::vec2& size) {
     UpdateHeadTransform();
 }
 
+void HeadBodyCharacter::SetBodySize(const glm::vec2& size) {
+    ApplyDrawableSize(m_BodyDrawable, size);
+    ApplyDrawableSize(m_IdleBodyDrawable, size);
+    UpdateHeadTransform();
+}
+
 void HeadBodyCharacter::SetHeadOffset(const glm::vec2& offset) {
     m_HeadOffset = offset;
     UpdateHeadTransform();
@@ -317,6 +323,31 @@ void HeadBodyCharacter::SetScale(const glm::vec2& scale) {
     if (m_HeadObject) {
         m_HeadObject->m_Transform.scale = scale;
     }
+}
+
+glm::vec2 HeadBodyCharacter::GetBodySize() const {
+    auto currentBody = m_IsIdle ? m_IdleBodyDrawable : m_BodyDrawable;
+    if (!currentBody) {
+        currentBody = m_BodyDrawable;
+    }
+    return GetDrawableSize(currentBody);
+}
+
+glm::vec2 HeadBodyCharacter::GetHeadSize() const {
+    auto currentHead = m_IsIdle ? m_IdleHeadDrawable : m_HeadDrawable;
+    if (!currentHead) {
+        currentHead = m_HeadDrawable;
+    }
+    return GetDrawableSize(currentHead);
+}
+
+glm::vec2 HeadBodyCharacter::GetHeadCenterOffset() const {
+    const glm::vec2 bodySize = GetBodySize();
+    const glm::vec2 headSize = GetHeadSize();
+    return {
+        m_HeadOffset.x,
+        m_HeadOffset.y + (bodySize.y * 0.5f + headSize.y * 0.5f),
+    };
 }
 
 // ----------------------------------------------------------------------------

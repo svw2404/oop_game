@@ -34,6 +34,8 @@ void App::Start() {
     m_Slopes.clear();
     m_CeilingSlopes.clear();
     m_Hazards.clear();
+    m_HasGreenPlatformBlock = false;
+    m_GreenButtonPressed = false;
 
     m_SolidBlocks.push_back(ImageRectToWorldRect(0.0f, 0.0f, 2380.0f, 45.0f));       // Roof
     // Left floor segment before the two lower depressions. Keep this as index 1
@@ -59,9 +61,11 @@ void App::Start() {
         // preserve the stepped/slope top silhouette, but keep the lower edge
         // simplified as support mass so collision stays stable.
         ImageRectToWorldRect(55.0f, 423.0f, 355.0f, 723.0f),
-        ImageRectToWorldRect(351.0f, 672.0f, 426.0f, 723.0f),
+        ImageRectToWorldRect(351.0f, 672.0f, 418.0f, 723.0f),
+        ImageRectToWorldRect(418.0f, 688.0f, 426.0f, 723.0f, false),
         ImageRectToWorldRect(426.0f, 708.0f, 483.0f, 723.0f, false),
-        ImageRectToWorldRect(483.0f, 704.0f, 668.0f, 723.0f),
+        ImageRectToWorldRect(483.0f, 704.0f, 493.0f, 723.0f, false),
+        ImageRectToWorldRect(491.0f, 704.0f, 668.0f, 723.0f),
         ImageRectToWorldRect(668.0f, 704.0f, 712.0f, 723.0f, false),
         ImageRectToWorldRect(712.0f, 664.0f, 1141.0f, 723.0f),
         ImageRectToWorldRect(1139.0f, 639.0f, 1187.0f, 723.0f),
@@ -74,15 +78,19 @@ void App::Start() {
         // map the clear top silhouette as flats + slopes and keep the hanging
         // lower notch as support mass only.
         ImageRectToWorldRect(594.0f, 299.0f, 643.0f, 423.0f, false),
-        ImageRectToWorldRect(643.0f, 236.0f, 784.0f, 423.0f, false),
+        ImageRectToWorldRect(643.0f, 236.0f, 776.0f, 423.0f, false),
+        ImageRectToWorldRect(776.0f, 255.0f, 784.0f, 423.0f, false),
         ImageRectToWorldRect(784.0f, 303.0f, 851.0f, 423.0f, false),
-        ImageRectToWorldRect(851.0f, 301.0f, 914.0f, 423.0f),
+        ImageRectToWorldRect(851.0f, 301.0f, 861.0f, 423.0f, false),
+        ImageRectToWorldRect(859.0f, 301.0f, 914.0f, 423.0f),
         ImageRectToWorldRect(914.0f, 357.0f, 958.0f, 423.0f, false),
         ImageRectToWorldRect(958.0f, 357.0f, 1031.0f, 423.0f),
         ImageRectToWorldRect(729.0f, 423.0f, 1027.0f, 544.0f),
-        ImageRectToWorldRect(1031.0f, 362.0f, 1536.0f, 423.0f),
+        ImageRectToWorldRect(1031.0f, 362.0f, 1528.0f, 423.0f),
+        ImageRectToWorldRect(1528.0f, 378.0f, 1536.0f, 423.0f, false),
         ImageRectToWorldRect(1536.0f, 395.0f, 1588.0f, 423.0f, false),
-        ImageRectToWorldRect(1588.0f, 393.0f, 1771.0f, 423.0f),
+        ImageRectToWorldRect(1588.0f, 393.0f, 1598.0f, 423.0f, false),
+        ImageRectToWorldRect(1596.0f, 393.0f, 1771.0f, 423.0f),
         ImageRectToWorldRect(1771.0f, 393.0f, 1832.0f, 423.0f, false),
         ImageRectToWorldRect(1832.0f, 362.0f, 2319.0f, 423.0f),
 
@@ -93,9 +101,11 @@ void App::Start() {
         ImageRectToWorldRect(1097.0f, 912.0f, 1151.0f, 1030.0f, false),
         ImageRectToWorldRect(1151.0f, 912.0f, 1220.0f, 1032.0f),
         ImageRectToWorldRect(1220.0f, 973.0f, 1275.0f, 1032.0f, false),
-        ImageRectToWorldRect(1275.0f, 973.0f, 1468.0f, 1032.0f),
+        ImageRectToWorldRect(1275.0f, 973.0f, 1460.0f, 1032.0f),
+        ImageRectToWorldRect(1460.0f, 992.0f, 1468.0f, 1032.0f, false),
         ImageRectToWorldRect(1468.0f, 1015.0f, 1527.0f, 1032.0f, false),
-        ImageRectToWorldRect(1527.0f, 1013.0f, 1712.0f, 1032.0f),
+        ImageRectToWorldRect(1527.0f, 1013.0f, 1537.0f, 1032.0f, false),
+        ImageRectToWorldRect(1535.0f, 1013.0f, 1712.0f, 1032.0f),
         ImageRectToWorldRect(1712.0f, 1013.0f, 1767.0f, 1032.0f, false),
         ImageRectToWorldRect(1767.0f, 973.0f, 1958.0f, 1032.0f),
         ImageRectToWorldRect(1958.0f, 973.0f, 2014.0f, 1090.0f, false),
@@ -119,7 +129,8 @@ void App::Start() {
         ImageRectToWorldRect(1044.0f, 1340.0f, 1160.0f, 1395.0f, false),
 
         // Main middle platform before slope 4.
-        ImageRectToWorldRect(1036.0f, 1340.0f, 1475.0f, 1395.0f),
+        ImageRectToWorldRect(1036.0f, 1340.0f, 1469.0f, 1395.0f),
+        ImageRectToWorldRect(1469.0f, 1360.0f, 1477.0f, 1395.0f, false),
 
         // Wider transition cap into Slope 4. This prevents a fall-through when
         // walking off the long middle platform and starting the next diagonal.
@@ -128,7 +139,8 @@ void App::Start() {
         // Slope 4 cleanup:
         // lower the under-slope support and delay the next flat top slightly.
         ImageRectToWorldRect(1475.0f, 1378.0f, 1529.0f, 1395.0f, false),
-        ImageRectToWorldRect(1529.0f, 1372.0f, 1704.0f, 1395.0f),
+        ImageRectToWorldRect(1529.0f, 1372.0f, 1539.0f, 1395.0f, false),
+        ImageRectToWorldRect(1537.0f, 1372.0f, 1704.0f, 1395.0f),
 
         // Wider transition cap into Slope 5 for the same reason.
         ImageRectToWorldRect(1704.0f, 1374.0f, 1722.0f, 1395.0f, false),
@@ -150,6 +162,58 @@ void App::Start() {
         ImageRectToWorldRect(2197.0f, 1525.0f, 2325.0f, 1704.0f),
     };
     m_SolidBlocks.insert(m_SolidBlocks.end(), perimeterBlocks.begin(), perimeterBlocks.end());
+
+    // Green button platform:
+    // The platform travels vertically through the hand-mapped passage
+    // x=55..292, y=904..1225. It starts high to block the route, then lowers
+    // while the nearby pressure button is held.
+    m_GreenPlatformRestRect = ImageRectToWorldRect(55.0f, 904.0f, 292.0f, 1004.0f);
+    m_GreenPlatformPressedRect = ImageRectToWorldRect(55.0f, 1125.0f, 292.0f, 1225.0f);
+    m_GreenPlatformCurrentRect = m_GreenPlatformRestRect;
+    m_GreenPlatformBlockIndex = m_SolidBlocks.size();
+    m_HasGreenPlatformBlock = true;
+    m_SolidBlocks.push_back(m_GreenPlatformCurrentRect);
+
+    m_GreenPlatform = std::make_shared<Character>(
+        GA_RESOURCE_DIR "/platform_green.png"
+    );
+    m_GreenPlatform->SetZIndex(7);
+    m_GreenPlatform->SetSize({
+        m_GreenPlatformCurrentRect.size.x,
+        m_GreenPlatformCurrentRect.size.x * (107.0f / 333.0f),
+    });
+    m_GreenPlatform->SetPosition(m_GreenPlatformCurrentRect.center);
+    m_Root.AddChild(m_GreenPlatform);
+
+    m_GreenButtonHitbox = ImageRectToWorldRect(805.0f, 1160.0f, 970.0f, 1220.0f);
+    const glm::vec2 greenButtonSize = {
+        m_GreenButtonHitbox.size.x / 2.0f,
+        (m_GreenButtonHitbox.size.x / 2.0f) * (120.0f / 189.0f),
+    };
+    m_GreenButtonHitbox.size = greenButtonSize;
+    m_GreenButtonHitbox.center.y =
+        ImagePointToWorldPoint(0.0f, 1223.0f).y + greenButtonSize.y * 0.5f;
+    m_SolidBlocks.push_back(m_GreenButtonHitbox);
+    m_GreenButton = std::make_shared<Character>(
+        GA_RESOURCE_DIR "/button_green.png"
+    );
+    m_GreenButton->SetZIndex(7);
+    m_GreenButton->SetSize(greenButtonSize);
+    m_GreenButton->SetPosition(m_GreenButtonHitbox.center);
+    m_Root.AddChild(m_GreenButton);
+
+    m_GreenButtonAfterHitbox = ImageRectToWorldRect(365.0f, 850.0f, 455.0f, 912.0f);
+    m_GreenButtonAfterHitbox.size = greenButtonSize;
+    m_GreenButtonAfterHitbox.center.y =
+        ImagePointToWorldPoint(0.0f, 912.0f).y + greenButtonSize.y * 0.5f;
+    m_SolidBlocks.push_back(m_GreenButtonAfterHitbox);
+    m_GreenButtonAfter = std::make_shared<Character>(
+        GA_RESOURCE_DIR "/button_green.png"
+    );
+    m_GreenButtonAfter->SetZIndex(7);
+    m_GreenButtonAfter->SetSize(greenButtonSize);
+    m_GreenButtonAfter->SetPosition(m_GreenButtonAfterHitbox.center);
+    m_Root.AddChild(m_GreenButtonAfter);
 
     m_Slopes = {
         // Slope 1: leftmost upper-left small connector
@@ -214,10 +278,14 @@ void App::Start() {
         const std::string bodyDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Body";
         const std::string idleDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Idle";
         const std::string runDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Run";
+        const std::string jumpDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Jump";
+        const std::string fallDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Fall";
 
         std::vector<std::string> bodyPaths;
         std::vector<std::string> idleHeadPaths;
         std::vector<std::string> runHeadPaths;
+        std::vector<std::string> jumpHeadPaths;
+        std::vector<std::string> fallHeadPaths;
 
         try {
             for (const auto& entry : std::filesystem::directory_iterator(bodyDir)) {
@@ -246,9 +314,29 @@ void App::Start() {
         } catch (const std::exception&) {
         }
 
+        try {
+            for (const auto& entry : std::filesystem::directory_iterator(jumpDir)) {
+                if (entry.is_regular_file()) {
+                    jumpHeadPaths.push_back(entry.path().string());
+                }
+            }
+        } catch (const std::exception&) {
+        }
+
+        try {
+            for (const auto& entry : std::filesystem::directory_iterator(fallDir)) {
+                if (entry.is_regular_file()) {
+                    fallHeadPaths.push_back(entry.path().string());
+                }
+            }
+        } catch (const std::exception&) {
+        }
+
         std::sort(bodyPaths.begin(), bodyPaths.end());
         std::sort(idleHeadPaths.begin(), idleHeadPaths.end());
         std::sort(runHeadPaths.begin(), runHeadPaths.end());
+        std::sort(jumpHeadPaths.begin(), jumpHeadPaths.end());
+        std::sort(fallHeadPaths.begin(), fallHeadPaths.end());
 
         if (bodyPaths.empty()) {
             bodyPaths.push_back(std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Body/fireboy_body_00.png");
@@ -258,6 +346,12 @@ void App::Start() {
         }
         if (runHeadPaths.empty()) {
             runHeadPaths = idleHeadPaths;
+        }
+        if (jumpHeadPaths.empty()) {
+            jumpHeadPaths = runHeadPaths;
+        }
+        if (fallHeadPaths.empty()) {
+            fallHeadPaths = runHeadPaths;
         }
 
         std::vector<std::string> moveBodyPaths;
@@ -278,7 +372,9 @@ void App::Start() {
 
         m_Fireboy->SetIdleBodyImage(bodyPaths.front());
         m_Fireboy->SetIdleHeadImage(idleHeadPaths, 120, true);
-        m_Fireboy->SetIdleState(true);
+        m_Fireboy->SetJumpHeadImage(jumpHeadPaths, 120, true);
+        m_Fireboy->SetFallHeadImage(fallHeadPaths, 120, true);
+        m_Fireboy->SetMotionState(HeadBodyCharacter::MotionState::Idle);
 
         if (m_SolidBlocks.size() >= 3) {
             const SolidRect& floor = m_SolidBlocks[1];
@@ -301,7 +397,132 @@ void App::Start() {
     }
 
     // -------------------------------------------------------------------------
-    // 5) Diamond
+    // 5) Watergirl
+    // -------------------------------------------------------------------------
+    {
+        const std::string bodyDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Body";
+        const std::string idleDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Idle";
+        const std::string runDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Run";
+        const std::string jumpDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Jump";
+        const std::string fallDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Fall";
+
+        std::vector<std::string> bodyPaths;
+        std::vector<std::string> idleHeadPaths;
+        std::vector<std::string> runHeadPaths;
+        std::vector<std::string> jumpHeadPaths;
+        std::vector<std::string> fallHeadPaths;
+
+        try {
+            for (const auto& entry : std::filesystem::directory_iterator(bodyDir)) {
+                if (entry.is_regular_file()) {
+                    bodyPaths.push_back(entry.path().string());
+                }
+            }
+        } catch (const std::exception&) {
+        }
+
+        try {
+            for (const auto& entry : std::filesystem::directory_iterator(idleDir)) {
+                if (entry.is_regular_file()) {
+                    idleHeadPaths.push_back(entry.path().string());
+                }
+            }
+        } catch (const std::exception&) {
+        }
+
+        try {
+            for (const auto& entry : std::filesystem::directory_iterator(runDir)) {
+                if (entry.is_regular_file()) {
+                    runHeadPaths.push_back(entry.path().string());
+                }
+            }
+        } catch (const std::exception&) {
+        }
+
+        try {
+            for (const auto& entry : std::filesystem::directory_iterator(jumpDir)) {
+                if (entry.is_regular_file()) {
+                    jumpHeadPaths.push_back(entry.path().string());
+                }
+            }
+        } catch (const std::exception&) {
+        }
+
+        try {
+            for (const auto& entry : std::filesystem::directory_iterator(fallDir)) {
+                if (entry.is_regular_file()) {
+                    fallHeadPaths.push_back(entry.path().string());
+                }
+            }
+        } catch (const std::exception&) {
+        }
+
+        std::sort(bodyPaths.begin(), bodyPaths.end());
+        std::sort(idleHeadPaths.begin(), idleHeadPaths.end());
+        std::sort(runHeadPaths.begin(), runHeadPaths.end());
+        std::sort(jumpHeadPaths.begin(), jumpHeadPaths.end());
+        std::sort(fallHeadPaths.begin(), fallHeadPaths.end());
+
+        if (bodyPaths.empty()) {
+            bodyPaths.push_back(std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Body/watergirl_body_00.png");
+        }
+        if (idleHeadPaths.empty()) {
+            idleHeadPaths.push_back(std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Idle/watergirl_idle_00.png");
+        }
+        if (runHeadPaths.empty()) {
+            runHeadPaths = idleHeadPaths;
+        }
+        if (jumpHeadPaths.empty()) {
+            jumpHeadPaths = runHeadPaths;
+        }
+        if (fallHeadPaths.empty()) {
+            fallHeadPaths = runHeadPaths;
+        }
+
+        std::vector<std::string> moveBodyPaths;
+        if (bodyPaths.size() > 1) {
+            moveBodyPaths.assign(bodyPaths.begin() + 1, bodyPaths.end());
+        } else {
+            moveBodyPaths.push_back(bodyPaths.front());
+        }
+
+        m_Watergirl = std::make_shared<HeadBodyCharacter>(
+            moveBodyPaths, runHeadPaths, 10.0f, 120, true, 120, true
+        );
+        m_Watergirl->SetSize({36.0f, 43.0f});
+        m_Watergirl->SetHeadScale(1.25f / 1.4f);
+        m_Watergirl->SetBodySize({30.0f / 1.4f, 34.0f / 1.4f});
+        m_Watergirl->SetHeadOffset({0.0f, -4.0f});
+        RecalculateWatergirlCollisionBoxes();
+
+        m_Watergirl->SetIdleBodyImage(bodyPaths.front());
+        m_Watergirl->SetIdleHeadImage(idleHeadPaths, 120, true);
+        m_Watergirl->SetJumpHeadImage(jumpHeadPaths, 120, true);
+        m_Watergirl->SetFallHeadImage(fallHeadPaths, 120, true);
+        m_Watergirl->SetMotionState(HeadBodyCharacter::MotionState::Idle);
+
+        if (m_SolidBlocks.size() >= 3) {
+            const SolidRect& floor = m_SolidBlocks[1];
+            const SolidRect& leftWall = m_SolidBlocks[2];
+
+            const float floorTop = floor.center.y + (floor.size.y * 0.5f);
+            const float wallRight = leftWall.center.x + (leftWall.size.x * 0.5f);
+
+            glm::vec2 spawnPos;
+            const float leftExtent = -GetWatergirlLeftEdge({0.0f, 0.0f});
+            const float bodyBottom = GetWatergirlBodyBottom({0.0f, 0.0f});
+            spawnPos.x = wallRight + leftExtent + 45.0f;
+            spawnPos.y = floorTop - bodyBottom;
+
+            m_Watergirl->SetPosition(spawnPos);
+            s_LastPos[m_Watergirl.get()] = spawnPos;
+        }
+
+        m_Root.AddChild(m_Watergirl);
+    }
+
+    // -------------------------------------------------------------------------
+    // 6) Diamond
     // -------------------------------------------------------------------------
     m_Diamond = std::make_shared<Character>(
         GA_RESOURCE_DIR "/Image/Character/RedDiamonds.png"
@@ -318,15 +539,24 @@ void App::Start() {
     // 6) 初始狀態
     // -------------------------------------------------------------------------
     m_FireboyVelocity = {0.0f, 0.0f};
+    m_WatergirlVelocity = {0.0f, 0.0f};
     m_FireboyOnGround = true;
+    m_WatergirlOnGround = true;
 
     LOG_DEBUG("Background Size: {}x{}", m_BackgroundDisplayedSize.x, m_BackgroundDisplayedSize.y);
     LOG_DEBUG(
         "Fireboy Body Box: {}x{} Head Box: {}x{}",
-        m_FireboyBodyHitboxSize.x,
-        m_FireboyBodyHitboxSize.y,
-        m_FireboyHeadHitboxSize.x,
-        m_FireboyHeadHitboxSize.y
+        m_FireboyCollision.bodyHitboxSize.x,
+        m_FireboyCollision.bodyHitboxSize.y,
+        m_FireboyCollision.headHitboxSize.x,
+        m_FireboyCollision.headHitboxSize.y
+    );
+    LOG_DEBUG(
+        "Watergirl Body Box: {}x{} Head Box: {}x{}",
+        m_WatergirlCollision.bodyHitboxSize.x,
+        m_WatergirlCollision.bodyHitboxSize.y,
+        m_WatergirlCollision.headHitboxSize.x,
+        m_WatergirlCollision.headHitboxSize.y
     );
 
     m_CurrentState = State::UPDATE;

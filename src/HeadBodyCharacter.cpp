@@ -106,6 +106,8 @@ void HeadBodyCharacter::SetSize(const glm::vec2& size) {
     const glm::vec2 headSize = size * 0.8f * m_HeadScale;
     ApplyDrawableSize(m_HeadDrawable, headSize);
     ApplyDrawableSize(m_IdleHeadDrawable, headSize);
+    ApplyDrawableSize(m_JumpHeadDrawable, headSize);
+    ApplyDrawableSize(m_FallHeadDrawable, headSize);
 
     UpdateHeadTransform();
 }
@@ -133,6 +135,9 @@ void HeadBodyCharacter::SetHeadScale(float scale) {
 
 void HeadBodyCharacter::SetHeadAbsoluteSize(const glm::vec2& size) {
     ApplyDrawableSize(m_HeadDrawable, size);
+    ApplyDrawableSize(m_IdleHeadDrawable, size);
+    ApplyDrawableSize(m_JumpHeadDrawable, size);
+    ApplyDrawableSize(m_FallHeadDrawable, size);
     UpdateHeadTransform();
 }
 
@@ -152,6 +157,7 @@ void HeadBodyCharacter::SetBodyImage(const std::string& path) {
         this->AddChild(m_BodyObject);
     }
 
+    RefreshDrawables();
     UpdateHeadTransform();
 }
 
@@ -169,6 +175,7 @@ void HeadBodyCharacter::SetBodyImage(const std::vector<std::string>& paths,
         this->AddChild(m_BodyObject);
     }
 
+    RefreshDrawables();
     UpdateHeadTransform();
 }
 
@@ -219,10 +226,8 @@ void HeadBodyCharacter::SetIdleBodyImage(const std::string& path) {
 
     m_UseIdleWhenIdle = true;
 
-    if (m_IsIdle && m_BodyObject) {
-        m_BodyObject->SetDrawable(m_IdleBodyDrawable);
-        UpdateHeadTransform();
-    }
+    RefreshDrawables();
+    UpdateHeadTransform();
 }
 
 void HeadBodyCharacter::SetIdleHeadImage(const std::string& path) {
@@ -235,10 +240,8 @@ void HeadBodyCharacter::SetIdleHeadImage(const std::string& path) {
 
     m_UseIdleWhenIdle = true;
 
-    if (m_IsIdle && m_HeadObject) {
-        m_HeadObject->SetDrawable(m_IdleHeadDrawable);
-        UpdateHeadTransform();
-    }
+    RefreshDrawables();
+    UpdateHeadTransform();
 }
 
 void HeadBodyCharacter::SetIdleHeadImage(const std::vector<std::string>& paths,
@@ -253,10 +256,36 @@ void HeadBodyCharacter::SetIdleHeadImage(const std::vector<std::string>& paths,
 
     m_UseIdleWhenIdle = true;
 
-    if (m_IsIdle && m_HeadObject) {
-        m_HeadObject->SetDrawable(m_IdleHeadDrawable);
-        UpdateHeadTransform();
+    RefreshDrawables();
+    UpdateHeadTransform();
+}
+
+void HeadBodyCharacter::SetJumpHeadImage(const std::vector<std::string>& paths,
+                                         std::size_t interval,
+                                         bool looping) {
+    m_JumpHeadDrawable = std::make_shared<Util::Animation>(paths, true, interval, looping, 0);
+
+    const glm::vec2 headSize = GetDrawableSize(m_HeadDrawable);
+    if (headSize.x > 0.0f && headSize.y > 0.0f) {
+        ApplyDrawableSize(m_JumpHeadDrawable, headSize);
     }
+
+    RefreshDrawables();
+    UpdateHeadTransform();
+}
+
+void HeadBodyCharacter::SetFallHeadImage(const std::vector<std::string>& paths,
+                                         std::size_t interval,
+                                         bool looping) {
+    m_FallHeadDrawable = std::make_shared<Util::Animation>(paths, true, interval, looping, 0);
+
+    const glm::vec2 headSize = GetDrawableSize(m_HeadDrawable);
+    if (headSize.x > 0.0f && headSize.y > 0.0f) {
+        ApplyDrawableSize(m_FallHeadDrawable, headSize);
+    }
+
+    RefreshDrawables();
+    UpdateHeadTransform();
 }
 
 void HeadBodyCharacter::SetIdleState(bool idle) {
@@ -265,29 +294,18 @@ void HeadBodyCharacter::SetIdleState(bool idle) {
     }
 
     m_IsIdle = idle;
+    SetMotionState(idle ? MotionState::Idle : MotionState::Move);
+}
 
-    if (idle) {
-        // 切到 idle drawable
-        m_BodyDrawableBackup = m_BodyDrawable;
-        m_HeadDrawableBackup = m_HeadDrawable;
-
-        if (m_IdleBodyDrawable && m_BodyObject) {
-            m_BodyObject->SetDrawable(m_IdleBodyDrawable);
-        }
-        if (m_IdleHeadDrawable && m_HeadObject) {
-            m_HeadObject->SetDrawable(m_IdleHeadDrawable);
-        }
-    } else {
-        // 還原移動 drawable
-        if (m_BodyDrawableBackup && m_BodyObject) {
-            m_BodyObject->SetDrawable(m_BodyDrawableBackup);
-        }
-        if (m_HeadDrawableBackup && m_HeadObject) {
-            m_HeadObject->SetDrawable(m_HeadDrawableBackup);
-        }
+void HeadBodyCharacter::SetMotionState(MotionState state) {
+    if (m_MotionState == state) {
+        m_IsIdle = (state == MotionState::Idle);
+        return;
     }
 
-    // 切換後重新對齊
+    m_MotionState = state;
+    m_IsIdle = (state == MotionState::Idle);
+    RefreshDrawables();
     UpdateHeadTransform();
     this->SetPosition(this->m_Transform.translation);
 }
@@ -325,8 +343,14 @@ void HeadBodyCharacter::SetScale(const glm::vec2& scale) {
     }
 }
 
+void HeadBodyCharacter::SetHeadRotation(float radians) {
+    if (m_HeadObject) {
+        m_HeadObject->m_Transform.rotation = radians;
+    }
+}
+
 glm::vec2 HeadBodyCharacter::GetBodySize() const {
-    auto currentBody = m_IsIdle ? m_IdleBodyDrawable : m_BodyDrawable;
+    auto currentBody = GetActiveBodyDrawable();
     if (!currentBody) {
         currentBody = m_BodyDrawable;
     }
@@ -334,7 +358,7 @@ glm::vec2 HeadBodyCharacter::GetBodySize() const {
 }
 
 glm::vec2 HeadBodyCharacter::GetHeadSize() const {
-    auto currentHead = m_IsIdle ? m_IdleHeadDrawable : m_HeadDrawable;
+    auto currentHead = GetActiveHeadDrawable();
     if (!currentHead) {
         currentHead = m_HeadDrawable;
     }
@@ -360,8 +384,8 @@ void HeadBodyCharacter::UpdateHeadTransform() {
     }
 
     // 依目前狀態選擇正在顯示的 drawable
-    auto currentBody = m_IsIdle ? m_IdleBodyDrawable : m_BodyDrawable;
-    auto currentHead = m_IsIdle ? m_IdleHeadDrawable : m_HeadDrawable;
+    auto currentBody = GetActiveBodyDrawable();
+    auto currentHead = GetActiveHeadDrawable();
 
     if (!currentBody) {
         currentBody = m_BodyDrawable;
@@ -376,4 +400,45 @@ void HeadBodyCharacter::UpdateHeadTransform() {
     // head 相對於 body 的自動偏移（置於 body 上方）
     const glm::vec2 autoOffset = {0.0f, (bodySize.y * 0.5f + headSize.y * 0.5f)};
     m_HeadObject->m_Transform.translation = m_HeadOffset + autoOffset;
+}
+
+void HeadBodyCharacter::RefreshDrawables() {
+    if (m_BodyObject) {
+        m_BodyObject->SetDrawable(GetActiveBodyDrawable());
+    }
+
+    if (m_HeadObject) {
+        m_HeadObject->SetDrawable(GetActiveHeadDrawable());
+    }
+}
+
+std::shared_ptr<Core::Drawable> HeadBodyCharacter::GetActiveBodyDrawable() const {
+    if (m_MotionState != MotionState::Move && m_IdleBodyDrawable) {
+        return m_IdleBodyDrawable;
+    }
+    return m_BodyDrawable;
+}
+
+std::shared_ptr<Core::Drawable> HeadBodyCharacter::GetActiveHeadDrawable() const {
+    switch (m_MotionState) {
+    case MotionState::Idle:
+        if (m_IdleHeadDrawable) {
+            return m_IdleHeadDrawable;
+        }
+        break;
+    case MotionState::Jump:
+        if (m_JumpHeadDrawable) {
+            return m_JumpHeadDrawable;
+        }
+        break;
+    case MotionState::Fall:
+        if (m_FallHeadDrawable) {
+            return m_FallHeadDrawable;
+        }
+        break;
+    case MotionState::Move:
+        break;
+    }
+
+    return m_HeadDrawable;
 }

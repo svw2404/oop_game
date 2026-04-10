@@ -11,6 +11,13 @@
 
 class HeadBodyCharacter : public Character {
 public:
+    enum class MotionState {
+        Idle,
+        Move,
+        Jump,
+        Fall,
+    };
+
     // ------------------------------------------------------------------------
     // Constructors
     // ------------------------------------------------------------------------
@@ -77,9 +84,16 @@ public:
     void SetIdleHeadImage(const std::vector<std::string>& paths,
                           std::size_t interval = 100,
                           bool looping = true);
+    void SetJumpHeadImage(const std::vector<std::string>& paths,
+                          std::size_t interval = 100,
+                          bool looping = true);
+    void SetFallHeadImage(const std::vector<std::string>& paths,
+                          std::size_t interval = 100,
+                          bool looping = true);
 
     // true = idle, false = moving
     void SetIdleState(bool idle);
+    void SetMotionState(MotionState state);
 
     // ------------------------------------------------------------------------
     // Transform
@@ -87,6 +101,7 @@ public:
 
     void SetPosition(const glm::vec2& pos);
     void SetScale(const glm::vec2& scale);
+    void SetHeadRotation(float radians);
 
     [[nodiscard]] glm::vec2 GetBodySize() const;
     [[nodiscard]] glm::vec2 GetHeadSize() const;
@@ -95,6 +110,9 @@ public:
 private:
     // 重新計算 head 的相對位置
     void UpdateHeadTransform();
+    void RefreshDrawables();
+    [[nodiscard]] std::shared_ptr<Core::Drawable> GetActiveBodyDrawable() const;
+    [[nodiscard]] std::shared_ptr<Core::Drawable> GetActiveHeadDrawable() const;
 
 private:
     // Body
@@ -107,13 +125,15 @@ private:
     std::shared_ptr<Core::Drawable> m_HeadDrawable;
     std::shared_ptr<Util::GameObject> m_HeadObject;
     std::shared_ptr<Core::Drawable> m_IdleHeadDrawable;
-    std::shared_ptr<Core::Drawable> m_HeadDrawableBackup;
+    std::shared_ptr<Core::Drawable> m_JumpHeadDrawable;
+    std::shared_ptr<Core::Drawable> m_FallHeadDrawable;
 
     // Runtime flags / parameters
     glm::vec2 m_HeadOffset{0.0f, 0.0f};
     float m_HeadScale{1.0f};
     bool m_UseIdleWhenIdle{false};
     bool m_IsIdle{false};
+    MotionState m_MotionState{MotionState::Move};
 };
 
 #endif // HEAD_BODY_CHARACTER_HPP

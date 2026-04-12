@@ -1,6 +1,7 @@
 #include "App.hpp"
 
 #include "HeadBodyCharacter.hpp"
+#include "Util/Animation.hpp"
 #include "Util/Logger.hpp"
 
 #include <algorithm>
@@ -34,8 +35,28 @@ void App::Start() {
     m_Slopes.clear();
     m_CeilingSlopes.clear();
     m_Hazards.clear();
+    m_LevelProps.clear();
+    m_AnimatedLevelProps.clear();
+    m_Diamonds.clear();
+    m_GreenSwitch.reset();
+    m_Cube.reset();
     m_HasGreenPlatformBlock = false;
+    m_HasCubeBlock = false;
     m_GreenButtonPressed = false;
+    m_GreenSwitchOn = false;
+    m_GreenSwitchTouchLatch = false;
+    m_FireDiamondsCollected = 0;
+    m_WaterDiamondsCollected = 0;
+    m_GreenDiamondsCollected = 0;
+    m_FireDiamondsTotal = 0;
+    m_WaterDiamondsTotal = 0;
+    m_GreenDiamondsTotal = 0;
+    m_CubeVelocity = {0.0f, 0.0f};
+    m_CubeOnGround = false;
+    m_FireboyDoor = {};
+    m_WatergirlDoor = {};
+    m_VictoryPhase = VictoryPhase::None;
+    m_VictoryTimer = 0.0f;
 
     m_SolidBlocks.push_back(ImageRectToWorldRect(0.0f, 0.0f, 2380.0f, 45.0f));       // Roof
     // Left floor segment before the two lower depressions. Keep this as index 1
@@ -175,7 +196,7 @@ void App::Start() {
     m_SolidBlocks.push_back(m_GreenPlatformCurrentRect);
 
     m_GreenPlatform = std::make_shared<Character>(
-        GA_RESOURCE_DIR "/platform_green.png"
+        GA_RESOURCE_DIR "/Image/Assets/platform_green.png"
     );
     m_GreenPlatform->SetZIndex(7);
     m_GreenPlatform->SetSize({
@@ -195,7 +216,7 @@ void App::Start() {
         ImagePointToWorldPoint(0.0f, 1223.0f).y + greenButtonSize.y * 0.5f;
     m_SolidBlocks.push_back(m_GreenButtonHitbox);
     m_GreenButton = std::make_shared<Character>(
-        GA_RESOURCE_DIR "/button_green.png"
+        GA_RESOURCE_DIR "/Image/Assets/button_green.png"
     );
     m_GreenButton->SetZIndex(7);
     m_GreenButton->SetSize(greenButtonSize);
@@ -208,12 +229,262 @@ void App::Start() {
         ImagePointToWorldPoint(0.0f, 912.0f).y + greenButtonSize.y * 0.5f;
     m_SolidBlocks.push_back(m_GreenButtonAfterHitbox);
     m_GreenButtonAfter = std::make_shared<Character>(
-        GA_RESOURCE_DIR "/button_green.png"
+        GA_RESOURCE_DIR "/Image/Assets/button_green.png"
     );
     m_GreenButtonAfter->SetZIndex(7);
     m_GreenButtonAfter->SetSize(greenButtonSize);
     m_GreenButtonAfter->SetPosition(m_GreenButtonAfterHitbox.center);
     m_Root.AddChild(m_GreenButtonAfter);
+
+    // -------------------------------------------------------------------------
+    // 3.5) Level 1 prop pass
+    // -------------------------------------------------------------------------
+    const float scaleX = m_BackgroundDisplayedSize.x / m_BackgroundOriginalSize.x;
+    const float scaleY = m_BackgroundDisplayedSize.y / m_BackgroundOriginalSize.y;
+
+    auto imageSizeToWorldSize = [&](float imageWidth, float imageHeight, float scale = 1.0f) {
+        return glm::vec2{imageWidth * scaleX * scale, imageHeight * scaleY * scale};
+    };
+
+    auto addPropAtBottom = [&](const std::string& path,
+                               float centerXImage,
+                               float bottomYImage,
+                               float imageWidth,
+                               float imageHeight,
+                               float zIndex,
+                               float scale = 1.0f) {
+        auto prop = std::make_shared<Character>(path);
+        const glm::vec2 size = imageSizeToWorldSize(imageWidth, imageHeight, scale);
+        glm::vec2 pos = ImagePointToWorldPoint(centerXImage, bottomYImage);
+        pos.y += size.y * 0.5f;
+        prop->SetZIndex(zIndex);
+        prop->SetSize(size);
+        prop->SetPosition(pos);
+        m_Root.AddChild(prop);
+        m_LevelProps.push_back(prop);
+        return prop;
+    };
+
+    auto addAnimatedHazardAtBottom = [&](const std::vector<std::string>& paths,
+                                         const HazardRect& hazardRect,
+                                         float centerXImage,
+                                         float bottomYImage,
+                                         float imageWidth,
+                                         float imageHeight,
+                                         float zIndex) {
+        auto hazardAnimation = std::make_shared<Util::Animation>(paths, true, 120, true, 0);
+        const glm::vec2 size = imageSizeToWorldSize(imageWidth, imageHeight);
+        hazardAnimation->SetSize(size);
+
+        glm::vec2 pos = ImagePointToWorldPoint(centerXImage, bottomYImage);
+        pos.y += size.y * 0.5f;
+
+        auto hazardObject = std::make_shared<Util::GameObject>(hazardAnimation, zIndex);
+        hazardObject->m_Transform.translation = pos;
+        m_Root.AddChild(hazardObject);
+        m_AnimatedLevelProps.push_back(hazardObject);
+        m_Hazards.push_back(hazardRect);
+
+        return hazardObject;
+    };
+
+    auto addCollectibleDiamond = [&](const std::string& path,
+                                     DiamondType type,
+                                     float centerXImage,
+                                     float centerYImage,
+                                     float imageWidth,
+                                     float imageHeight,
+                                     float zIndex,
+                                     float scale = 1.0f,
+                                     bool required = false) {
+        auto diamond = std::make_shared<Character>(path);
+        const glm::vec2 size = imageSizeToWorldSize(imageWidth, imageHeight, scale);
+        diamond->SetZIndex(zIndex);
+        diamond->SetSize(size);
+        diamond->SetPosition(ImagePointToWorldPoint(centerXImage, centerYImage));
+        m_Root.AddChild(diamond);
+        m_Diamonds.push_back({diamond, type, required, false});
+
+        switch (type) {
+        case DiamondType::Fire:
+            ++m_FireDiamondsTotal;
+            break;
+        case DiamondType::Water:
+            ++m_WaterDiamondsTotal;
+            break;
+        case DiamondType::Neutral:
+            ++m_GreenDiamondsTotal;
+            break;
+        }
+
+        return diamond;
+    };
+
+    const float propScale = 1.0f / 1.5f;
+    const float diamondScale = propScale * 0.90f;
+    const std::vector<std::string> lavaPaths = {
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lava_00.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lava_01.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lava_02.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lava_03.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lava_04.png",
+    };
+    const std::vector<std::string> waterPaths = {
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/water_00.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/water_01.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/water_02.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/water_03.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/water_04.png",
+    };
+    HazardRect lowerLavaHazard;
+    {
+        const SolidRect rect = ImageRectToWorldRect(1162.0f, 1738.0f, 1336.0f, 1760.0f);
+        lowerLavaHazard.center = rect.center;
+        lowerLavaHazard.size = rect.size;
+        lowerLavaHazard.type = HazardRect::Type::Lava;
+    }
+    HazardRect lowerWaterHazard;
+    {
+        const SolidRect rect = ImageRectToWorldRect(1659.0f, 1738.0f, 1833.0f, 1760.0f);
+        lowerWaterHazard.center = rect.center;
+        lowerWaterHazard.size = rect.size;
+        lowerWaterHazard.type = HazardRect::Type::Water;
+    }
+
+    // Approximate Level 1 dressing. We can fine-tune these image coordinates together.
+    addAnimatedHazardAtBottom(
+        lavaPaths,
+        lowerLavaHazard,
+        1244.5f, 1760.0f, 275.0f, 275.0f * (61.0f / 177.0f), 6.7f
+    );
+    addAnimatedHazardAtBottom(
+        waterPaths,
+        lowerWaterHazard,
+        1741.5f, 1760.0f, 275.0f, 275.0f * (60.0f / 178.0f), 6.7f
+    );
+
+    m_GreenSwitch = addPropAtBottom(
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/switch_green_off.png",
+        550.0f, 1466.0f, 148.0f, 124.0f, 7.6f, propScale
+    );
+    const glm::vec2 switchSpriteSize = imageSizeToWorldSize(148.0f, 124.0f, propScale);
+    m_GreenSwitchHitbox.center = m_GreenSwitch->GetPosition() + glm::vec2{
+        -switchSpriteSize.x * 0.03f,
+        -switchSpriteSize.y * 0.18f,
+    };
+    m_GreenSwitchHitbox.size = {
+        switchSpriteSize.x * 0.62f,
+        switchSpriteSize.y * 0.46f,
+    };
+
+    // Top exit doors.
+    m_FireboyDoor.closedImagePath =
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_closed.png";
+    m_FireboyDoor.openingImagePaths = {
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_opening_00.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_opening_01.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_opening_02.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_opening_03.png",
+    };
+    m_FireboyDoor.sprite = addPropAtBottom(
+        m_FireboyDoor.closedImagePath,
+        1965.0f, 362.0f, 160.0f, 188.0f, 7.2f, propScale
+    );
+    const glm::vec2 fireboyDoorSize = imageSizeToWorldSize(160.0f, 188.0f, propScale);
+    m_FireboyDoor.triggerRect.center = m_FireboyDoor.sprite->GetPosition() + glm::vec2{
+        0.0f,
+        -fireboyDoorSize.y * 0.14f,
+    };
+    m_FireboyDoor.triggerRect.size = {
+        fireboyDoorSize.x * 0.46f,
+        fireboyDoorSize.y * 0.72f,
+    };
+
+    m_WatergirlDoor.closedImagePath =
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/watergirl_door_closed.png";
+    m_WatergirlDoor.openingImagePaths = {
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/watergirl_door_opening_00.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/watergirl_door_opening_01.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/watergirl_door_opening_02.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/watergirl_door_opening_03.png",
+    };
+    m_WatergirlDoor.sprite = addPropAtBottom(
+        m_WatergirlDoor.closedImagePath,
+        2140.0f, 362.0f, 162.0f, 188.0f, 7.2f, propScale
+    );
+    const glm::vec2 watergirlDoorSize = imageSizeToWorldSize(162.0f, 188.0f, propScale);
+    m_WatergirlDoor.triggerRect.center = m_WatergirlDoor.sprite->GetPosition() + glm::vec2{
+        watergirlDoorSize.x * 0.02f,
+        -watergirlDoorSize.y * 0.10f,
+    };
+    m_WatergirlDoor.triggerRect.size = {
+        watergirlDoorSize.x * 0.60f,
+        watergirlDoorSize.y * 0.82f,
+    };
+
+    // Central cube block. Fit it to the alley between the upper bridge
+    // underside (y=423) and the floor below (y=546), leaving a tiny margin
+    // so the push physics do not snag on the ceiling.
+    const float cubeFitScale = (123.0f - 4.0f) / 124.0f;
+    const glm::vec2 cubeSpriteSize = imageSizeToWorldSize(123.0f, 124.0f, cubeFitScale);
+    const glm::vec2 cubeHitboxSize = {
+        cubeSpriteSize.x * m_CubeHitboxScale.x,
+        cubeSpriteSize.y * m_CubeHitboxScale.y,
+    };
+    const glm::vec2 cubeFloorPoint = ImagePointToWorldPoint(1415.0f, 546.0f);
+    m_CubeRect.center = cubeFloorPoint + glm::vec2{0.0f, cubeHitboxSize.y * 0.5f};
+    m_CubeRect.size = cubeHitboxSize;
+    m_CubeSpawnRect = m_CubeRect;
+    m_CubeBlockIndex = m_SolidBlocks.size();
+    m_HasCubeBlock = true;
+    m_SolidBlocks.push_back(m_CubeRect);
+
+    m_Cube = std::make_shared<Character>(
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/cube.png"
+    );
+    m_Cube->SetZIndex(8.1f);
+    m_Cube->SetSize(cubeSpriteSize);
+    m_Cube->SetPosition(cubeFloorPoint + glm::vec2{0.0f, cubeSpriteSize.y * 0.5f});
+    m_CubeSpawnPosition = m_Cube->GetPosition();
+    m_Root.AddChild(m_Cube);
+
+    // Collectible diamonds. These are not terrain colliders; pickup is handled
+    // separately so the characters can pass through them and collect by color.
+    addCollectibleDiamond(
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_red.png",
+        DiamondType::Fire,
+        800.0f, 230.0f, 121.0f, 111.0f, 8.4f, diamondScale
+    );
+    addCollectibleDiamond(
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_blue.png",
+        DiamondType::Water,
+        120.0f, 672.0f, 117.0f, 111.0f, 8.4f, diamondScale
+    );
+    addCollectibleDiamond(
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_blue.png",
+        DiamondType::Water,
+        1450.0f, 292.0f, 117.0f, 111.0f, 8.4f, diamondScale
+    );
+    addCollectibleDiamond(
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_blue.png",
+        DiamondType::Water,
+        1657.0f, 1153.0f, 117.0f, 111.0f, 8.4f, diamondScale
+    );
+    addCollectibleDiamond(
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_red.png",
+        DiamondType::Fire,
+        1335.0f, 1643.0f, 121.0f, 111.0f, 8.4f, diamondScale
+    );
+    addCollectibleDiamond(
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_blue.png",
+        DiamondType::Water,
+        1880.0f, 1643.0f, 117.0f, 111.0f, 8.4f, diamondScale
+    );
+    addCollectibleDiamond(
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_green.png",
+        DiamondType::Neutral,
+        975.0f, 1125.0f, 113.0f, 106.0f, 8.4f, diamondScale
+    );
 
     m_Slopes = {
         // Slope 1: leftmost upper-left small connector
@@ -280,12 +551,14 @@ void App::Start() {
         const std::string runDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Run";
         const std::string jumpDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Jump";
         const std::string fallDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Fall";
+        const std::string winDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Win";
 
         std::vector<std::string> bodyPaths;
         std::vector<std::string> idleHeadPaths;
         std::vector<std::string> runHeadPaths;
         std::vector<std::string> jumpHeadPaths;
         std::vector<std::string> fallHeadPaths;
+        std::vector<std::string> winHeadPaths;
 
         try {
             for (const auto& entry : std::filesystem::directory_iterator(bodyDir)) {
@@ -332,11 +605,21 @@ void App::Start() {
         } catch (const std::exception&) {
         }
 
+        try {
+            for (const auto& entry : std::filesystem::directory_iterator(winDir)) {
+                if (entry.is_regular_file()) {
+                    winHeadPaths.push_back(entry.path().string());
+                }
+            }
+        } catch (const std::exception&) {
+        }
+
         std::sort(bodyPaths.begin(), bodyPaths.end());
         std::sort(idleHeadPaths.begin(), idleHeadPaths.end());
         std::sort(runHeadPaths.begin(), runHeadPaths.end());
         std::sort(jumpHeadPaths.begin(), jumpHeadPaths.end());
         std::sort(fallHeadPaths.begin(), fallHeadPaths.end());
+        std::sort(winHeadPaths.begin(), winHeadPaths.end());
 
         if (bodyPaths.empty()) {
             bodyPaths.push_back(std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Body/fireboy_body_00.png");
@@ -353,6 +636,9 @@ void App::Start() {
         if (fallHeadPaths.empty()) {
             fallHeadPaths = runHeadPaths;
         }
+        if (winHeadPaths.empty()) {
+            winHeadPaths = idleHeadPaths;
+        }
 
         std::vector<std::string> moveBodyPaths;
         if (bodyPaths.size() > 1) {
@@ -364,9 +650,9 @@ void App::Start() {
         m_Fireboy = std::make_shared<HeadBodyCharacter>(
             moveBodyPaths, runHeadPaths, 10.0f, 120, true, 120, true
         );
-        m_Fireboy->SetSize({36.0f, 43.0f});
+        m_Fireboy->SetSize({36.0f, 40.0f});
         m_Fireboy->SetHeadScale(1.25f / 1.4f);
-        m_Fireboy->SetBodySize({30.0f / 1.4f, 34.0f / 1.4f});
+        m_Fireboy->SetBodySize({30.0f / 1.4f, 31.0f / 1.4f});
         m_Fireboy->SetHeadOffset({0.0f, -4.0f});
         RecalculateFireboyCollisionBoxes();
 
@@ -374,6 +660,7 @@ void App::Start() {
         m_Fireboy->SetIdleHeadImage(idleHeadPaths, 120, true);
         m_Fireboy->SetJumpHeadImage(jumpHeadPaths, 120, true);
         m_Fireboy->SetFallHeadImage(fallHeadPaths, 120, true);
+        m_Fireboy->SetWinHeadImage(winHeadPaths, 90, true);
         m_Fireboy->SetMotionState(HeadBodyCharacter::MotionState::Idle);
 
         if (m_SolidBlocks.size() >= 3) {
@@ -390,6 +677,7 @@ void App::Start() {
             spawnPos.y = floorTop - bodyBottom;
 
             m_Fireboy->SetPosition(spawnPos);
+            m_FireboySpawnPosition = spawnPos;
             s_LastPos[m_Fireboy.get()] = spawnPos;
         }
 
@@ -405,12 +693,14 @@ void App::Start() {
         const std::string runDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Run";
         const std::string jumpDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Jump";
         const std::string fallDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Fall";
+        const std::string winDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Win";
 
         std::vector<std::string> bodyPaths;
         std::vector<std::string> idleHeadPaths;
         std::vector<std::string> runHeadPaths;
         std::vector<std::string> jumpHeadPaths;
         std::vector<std::string> fallHeadPaths;
+        std::vector<std::string> winHeadPaths;
 
         try {
             for (const auto& entry : std::filesystem::directory_iterator(bodyDir)) {
@@ -457,11 +747,21 @@ void App::Start() {
         } catch (const std::exception&) {
         }
 
+        try {
+            for (const auto& entry : std::filesystem::directory_iterator(winDir)) {
+                if (entry.is_regular_file()) {
+                    winHeadPaths.push_back(entry.path().string());
+                }
+            }
+        } catch (const std::exception&) {
+        }
+
         std::sort(bodyPaths.begin(), bodyPaths.end());
         std::sort(idleHeadPaths.begin(), idleHeadPaths.end());
         std::sort(runHeadPaths.begin(), runHeadPaths.end());
         std::sort(jumpHeadPaths.begin(), jumpHeadPaths.end());
         std::sort(fallHeadPaths.begin(), fallHeadPaths.end());
+        std::sort(winHeadPaths.begin(), winHeadPaths.end());
 
         if (bodyPaths.empty()) {
             bodyPaths.push_back(std::string(GA_RESOURCE_DIR) + "/Image/Character/Watergirl/Body/watergirl_body_00.png");
@@ -478,6 +778,9 @@ void App::Start() {
         if (fallHeadPaths.empty()) {
             fallHeadPaths = runHeadPaths;
         }
+        if (winHeadPaths.empty()) {
+            winHeadPaths = idleHeadPaths;
+        }
 
         std::vector<std::string> moveBodyPaths;
         if (bodyPaths.size() > 1) {
@@ -489,9 +792,10 @@ void App::Start() {
         m_Watergirl = std::make_shared<HeadBodyCharacter>(
             moveBodyPaths, runHeadPaths, 10.0f, 120, true, 120, true
         );
-        m_Watergirl->SetSize({36.0f, 43.0f});
+        m_Watergirl->SetSize({36.0f, 40.0f});
         m_Watergirl->SetHeadScale(1.25f / 1.4f);
-        m_Watergirl->SetBodySize({30.0f / 1.4f, 34.0f / 1.4f});
+        m_Watergirl->SetMoveHeadWidthScale(1.18f);
+        m_Watergirl->SetBodySize({30.0f / 1.4f, 31.0f / 1.4f});
         m_Watergirl->SetHeadOffset({0.0f, -4.0f});
         RecalculateWatergirlCollisionBoxes();
 
@@ -499,6 +803,7 @@ void App::Start() {
         m_Watergirl->SetIdleHeadImage(idleHeadPaths, 120, true);
         m_Watergirl->SetJumpHeadImage(jumpHeadPaths, 120, true);
         m_Watergirl->SetFallHeadImage(fallHeadPaths, 120, true);
+        m_Watergirl->SetWinHeadImage(winHeadPaths, 90, true);
         m_Watergirl->SetMotionState(HeadBodyCharacter::MotionState::Idle);
 
         if (m_SolidBlocks.size() >= 3) {
@@ -515,25 +820,12 @@ void App::Start() {
             spawnPos.y = floorTop - bodyBottom;
 
             m_Watergirl->SetPosition(spawnPos);
+            m_WatergirlSpawnPosition = spawnPos;
             s_LastPos[m_Watergirl.get()] = spawnPos;
         }
 
         m_Root.AddChild(m_Watergirl);
     }
-
-    // -------------------------------------------------------------------------
-    // 6) Diamond
-    // -------------------------------------------------------------------------
-    m_Diamond = std::make_shared<Character>(
-        GA_RESOURCE_DIR "/Image/Character/RedDiamonds.png"
-    );
-    m_Diamond->SetZIndex(8);
-    m_Diamond->SetSize({18.0f, 18.0f});
-
-    const float blockTop = m_TestBlock.center.y + m_TestBlock.size.y * 0.5f;
-    const float diamondY = blockTop + m_DiamondHitboxSize.y * 0.5f + 5.0f;
-    m_Diamond->SetPosition({m_TestBlock.center.x, diamondY});
-    m_Root.AddChild(m_Diamond);
 
     // -------------------------------------------------------------------------
     // 6) 初始狀態

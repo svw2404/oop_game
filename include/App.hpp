@@ -39,6 +39,34 @@ private:
         glm::vec2 headHitboxPadding = {0.0f, 0.0f};
     };
 
+    enum class DiamondType {
+        Fire,
+        Water,
+        Neutral,
+    };
+
+    struct CollectibleDiamond {
+        std::shared_ptr<Character> sprite;
+        DiamondType type = DiamondType::Fire;
+        bool required = false;
+        bool collected = false;
+    };
+
+    struct ExitDoor {
+        std::shared_ptr<Character> sprite;
+        SolidRect triggerRect;
+        std::string closedImagePath;
+        std::vector<std::string> openingImagePaths;
+        float openProgress = 0.0f;
+        bool occupied = false;
+    };
+
+    enum class VictoryPhase {
+        None,
+        RunIntoDoor,
+        Celebrate,
+    };
+
     // ------------------------------------------------------------------------
     // Core gameplay steps
     // ------------------------------------------------------------------------
@@ -62,12 +90,30 @@ private:
         const glm::vec2& velocity,
         bool onGround
     );
+    void UpdateGreenSwitch();
     void UpdateGreenPlatform();
+    void UpdateCubePhysics();
+    bool CheckHazards();
+    void ResetLevelState();
+    void UpdateExitDoors();
+    void UpdateVictorySequence();
     bool IsGreenButtonPressed() const;
+    bool IsGreenSwitchTouched() const;
+    bool CubeTouchesRect(const SolidRect& rect) const;
+    bool IsCharacterAtDoor(
+        const std::shared_ptr<HeadBodyCharacter>& character,
+        const CharacterCollisionProfile& profile,
+        const ExitDoor& door
+    ) const;
     bool CharacterTouchesRect(
         const std::shared_ptr<HeadBodyCharacter>& character,
         const CharacterCollisionProfile& profile,
         const SolidRect& rect
+    ) const;
+    bool CharacterTouchesHazard(
+        const std::shared_ptr<HeadBodyCharacter>& character,
+        const CharacterCollisionProfile& profile,
+        const HazardRect& hazard
     ) const;
     void CarryCharacterWithPlatform(
         const std::shared_ptr<HeadBodyCharacter>& character,
@@ -75,6 +121,13 @@ private:
         const SolidRect& oldPlatform,
         float platformDeltaY
     ) const;
+    void CarryCharacterWithCube(
+        const std::shared_ptr<HeadBodyCharacter>& character,
+        const CharacterCollisionProfile& profile,
+        const SolidRect& oldCube,
+        const glm::vec2& cubeDelta
+    ) const;
+    void CarryCubeWithPlatform(const SolidRect& oldPlatform, float platformDeltaY);
     void HandleFireboyInput();
     void HandleWatergirlInput();
     void UpdateFireboyPhysics();
@@ -207,18 +260,29 @@ private:
     std::shared_ptr<BackgroundImage> m_Background;
     std::shared_ptr<HeadBodyCharacter> m_Fireboy;
     std::shared_ptr<HeadBodyCharacter> m_Watergirl;
-    std::shared_ptr<Character> m_Diamond;
     std::shared_ptr<Character> m_GreenPlatform;
     std::shared_ptr<Character> m_GreenButton;
     std::shared_ptr<Character> m_GreenButtonAfter;
+    std::shared_ptr<Character> m_GreenSwitch;
+    std::shared_ptr<Character> m_Cube;
+    ExitDoor m_FireboyDoor;
+    ExitDoor m_WatergirlDoor;
+    std::vector<std::shared_ptr<Character>> m_LevelProps;
+    std::vector<std::shared_ptr<Util::GameObject>> m_AnimatedLevelProps;
+    std::vector<CollectibleDiamond> m_Diamonds;
 
     // ------------------------------------------------------------------------
     // Physics parameters
     // ------------------------------------------------------------------------
     glm::vec2 m_FireboyVelocity = {0.0f, 0.0f};
     glm::vec2 m_WatergirlVelocity = {0.0f, 0.0f};
+    glm::vec2 m_CubeVelocity = {0.0f, 0.0f};
+    glm::vec2 m_FireboySpawnPosition = {0.0f, 0.0f};
+    glm::vec2 m_WatergirlSpawnPosition = {0.0f, 0.0f};
+    glm::vec2 m_CubeSpawnPosition = {0.0f, 0.0f};
     bool m_FireboyOnGround = false;
     bool m_WatergirlOnGround = false;
+    bool m_CubeOnGround = false;
 
     float m_MoveSpeed = 1.8f;
     float m_GroundAcceleration = 0.10f;
@@ -240,9 +304,16 @@ private:
     // ------------------------------------------------------------------------
     // Gameplay sizes
     // ------------------------------------------------------------------------
-    glm::vec2 m_DiamondHitboxSize = {16.0f, 16.0f};
+    glm::vec2 m_DiamondHitboxScale = {0.60f, 0.60f};
+    glm::vec2 m_CubeHitboxScale = {0.90f, 1.00f};
     CharacterCollisionProfile m_FireboyCollision;
     CharacterCollisionProfile m_WatergirlCollision;
+    int m_FireDiamondsCollected = 0;
+    int m_WaterDiamondsCollected = 0;
+    int m_GreenDiamondsCollected = 0;
+    int m_FireDiamondsTotal = 0;
+    int m_WaterDiamondsTotal = 0;
+    int m_GreenDiamondsTotal = 0;
 
     glm::vec2 m_BackgroundOriginalSize = {2380.0f, 1760.0f};
     glm::vec2 m_BackgroundDisplayedSize = {1244.16f, 699.84f};
@@ -260,10 +331,24 @@ private:
     SolidRect m_GreenPlatformCurrentRect;
     SolidRect m_GreenButtonHitbox;
     SolidRect m_GreenButtonAfterHitbox;
+    SolidRect m_GreenSwitchHitbox;
+    SolidRect m_CubeRect;
+    SolidRect m_CubeSpawnRect;
     std::size_t m_GreenPlatformBlockIndex = 0;
+    std::size_t m_CubeBlockIndex = 0;
     bool m_HasGreenPlatformBlock = false;
+    bool m_HasCubeBlock = false;
     bool m_GreenButtonPressed = false;
+    bool m_GreenSwitchOn = false;
+    bool m_GreenSwitchTouchLatch = false;
     float m_GreenPlatformSpeed = 2.2f;
+    float m_CubePushSpeed = 1.15f;
+    float m_CubePushAcceleration = 0.10f;
+    float m_CubeDeceleration = 0.08f;
+    VictoryPhase m_VictoryPhase = VictoryPhase::None;
+    float m_VictoryTimer = 0.0f;
+    float m_VictoryRunDuration = 0.30f;
+    float m_DoorFrameDuration = 0.06f;
 };
 
 #endif // APP_HPP

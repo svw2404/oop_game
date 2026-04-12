@@ -16,6 +16,7 @@ public:
         Move,
         Jump,
         Fall,
+        Win,
     };
 
     // ------------------------------------------------------------------------
@@ -56,6 +57,7 @@ public:
 
     // 設定頭部縮放倍率（相對於自動尺寸）
     void SetHeadScale(float scale);
+    void SetMoveHeadWidthScale(float scale);
 
     // 直接設定頭部絕對尺寸
     void SetHeadAbsoluteSize(const glm::vec2& size);
@@ -90,6 +92,9 @@ public:
     void SetFallHeadImage(const std::vector<std::string>& paths,
                           std::size_t interval = 100,
                           bool looping = true);
+    void SetWinHeadImage(const std::vector<std::string>& paths,
+                         std::size_t interval = 100,
+                         bool looping = true);
 
     // true = idle, false = moving
     void SetIdleState(bool idle);
@@ -102,6 +107,7 @@ public:
     void SetPosition(const glm::vec2& pos);
     void SetScale(const glm::vec2& scale);
     void SetHeadRotation(float radians);
+    void SetAirborneRunHeadOffsetEnabled(bool enabled);
 
     [[nodiscard]] glm::vec2 GetBodySize() const;
     [[nodiscard]] glm::vec2 GetHeadSize() const;
@@ -127,10 +133,16 @@ private:
     std::shared_ptr<Core::Drawable> m_IdleHeadDrawable;
     std::shared_ptr<Core::Drawable> m_JumpHeadDrawable;
     std::shared_ptr<Core::Drawable> m_FallHeadDrawable;
+    std::shared_ptr<Core::Drawable> m_WinHeadDrawable;
 
     // Runtime flags / parameters
     glm::vec2 m_HeadOffset{0.0f, 0.0f};
+    glm::vec2 m_JumpHeadOffset{0.0f, -9.0f};
+    glm::vec2 m_AirborneRunHeadOffset{0.0f, -6.0f};
+    float m_HeadRotation{0.0f};
     float m_HeadScale{1.0f};
+    float m_MoveHeadWidthScale{1.0f};
+    bool m_UseAirborneRunHeadOffset{false};
     bool m_UseIdleWhenIdle{false};
     bool m_IsIdle{false};
     MotionState m_MotionState{MotionState::Move};

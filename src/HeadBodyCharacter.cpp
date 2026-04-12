@@ -1,5 +1,8 @@
 #include "HeadBodyCharacter.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 namespace {
 glm::vec2 GetDrawableSize(const std::shared_ptr<Core::Drawable>& drawable) {
     if (!drawable) {
@@ -108,6 +111,7 @@ void HeadBodyCharacter::SetSize(const glm::vec2& size) {
     ApplyDrawableSize(m_IdleHeadDrawable, headSize);
     ApplyDrawableSize(m_JumpHeadDrawable, headSize);
     ApplyDrawableSize(m_FallHeadDrawable, headSize);
+    ApplyDrawableSize(m_WinHeadDrawable, headSize);
 
     UpdateHeadTransform();
 }
@@ -133,11 +137,18 @@ void HeadBodyCharacter::SetHeadScale(float scale) {
     }
 }
 
+void HeadBodyCharacter::SetMoveHeadWidthScale(float scale) {
+    m_MoveHeadWidthScale = scale;
+    UpdateHeadTransform();
+    this->SetPosition(this->m_Transform.translation);
+}
+
 void HeadBodyCharacter::SetHeadAbsoluteSize(const glm::vec2& size) {
     ApplyDrawableSize(m_HeadDrawable, size);
     ApplyDrawableSize(m_IdleHeadDrawable, size);
     ApplyDrawableSize(m_JumpHeadDrawable, size);
     ApplyDrawableSize(m_FallHeadDrawable, size);
+    ApplyDrawableSize(m_WinHeadDrawable, size);
     UpdateHeadTransform();
 }
 
@@ -288,6 +299,20 @@ void HeadBodyCharacter::SetFallHeadImage(const std::vector<std::string>& paths,
     UpdateHeadTransform();
 }
 
+void HeadBodyCharacter::SetWinHeadImage(const std::vector<std::string>& paths,
+                                        std::size_t interval,
+                                        bool looping) {
+    m_WinHeadDrawable = std::make_shared<Util::Animation>(paths, true, interval, looping, 0);
+
+    const glm::vec2 headSize = GetDrawableSize(m_HeadDrawable);
+    if (headSize.x > 0.0f && headSize.y > 0.0f) {
+        ApplyDrawableSize(m_WinHeadDrawable, headSize);
+    }
+
+    RefreshDrawables();
+    UpdateHeadTransform();
+}
+
 void HeadBodyCharacter::SetIdleState(bool idle) {
     if (!m_UseIdleWhenIdle || m_IsIdle == idle) {
         return;
@@ -339,14 +364,30 @@ void HeadBodyCharacter::SetScale(const glm::vec2& scale) {
     }
 
     if (m_HeadObject) {
-        m_HeadObject->m_Transform.scale = scale;
+        const float headWidthScale =
+            (m_MotionState == MotionState::Move) ? m_MoveHeadWidthScale : 1.0f;
+        m_HeadObject->m_Transform.scale = {scale.x * headWidthScale, scale.y};
     }
+
+    // Re-apply head placement so jump/fall visual offsets respond immediately
+    // when the character turns in the air.
+    this->SetPosition(this->m_Transform.translation);
 }
 
 void HeadBodyCharacter::SetHeadRotation(float radians) {
+    m_HeadRotation = radians;
     if (m_HeadObject) {
         m_HeadObject->m_Transform.rotation = radians;
     }
+}
+
+void HeadBodyCharacter::SetAirborneRunHeadOffsetEnabled(bool enabled) {
+    if (m_UseAirborneRunHeadOffset == enabled) {
+        return;
+    }
+
+    m_UseAirborneRunHeadOffset = enabled;
+    this->SetPosition(this->m_Transform.translation);
 }
 
 glm::vec2 HeadBodyCharacter::GetBodySize() const {
@@ -394,21 +435,71 @@ void HeadBodyCharacter::UpdateHeadTransform() {
         currentHead = m_HeadDrawable;
     }
 
+    if (m_MotionState == MotionState::Win) {
+        auto referenceBody = m_IdleBodyDrawable ? m_IdleBodyDrawable : m_BodyDrawable;
+        auto referenceHead = m_IdleHeadDrawable ? m_IdleHeadDrawable : m_HeadDrawable;
+        if (!referenceBody) {
+            referenceBody = currentBody;
+        }
+        if (!referenceHead) {
+            referenceHead = currentHead;
+        }
+
+        const glm::vec2 bodySize = GetDrawableSize(referenceBody);
+        const glm::vec2 headSize = GetDrawableSize(referenceHead);
+        const glm::vec2 headCenter = m_HeadOffset + glm::vec2{
+            0.0f,
+            (bodySize.y * 0.5f + headSize.y * 0.5f),
+        };
+
+        const float left = std::min(-bodySize.x * 0.5f, headCenter.x - headSize.x * 0.5f);
+        const float right = std::max(bodySize.x * 0.5f, headCenter.x + headSize.x * 0.5f);
+        const float bottom = std::min(-bodySize.y * 0.5f, headCenter.y - headSize.y * 0.5f);
+        const float top = std::max(bodySize.y * 0.5f, headCenter.y + headSize.y * 0.5f);
+        const glm::vec2 winSize = {right - left, top - bottom};
+
+        ApplyDrawableSize(currentHead, winSize);
+        m_HeadObject->m_Transform.translation = {
+            (left + right) * 0.5f,
+            (bottom + top) * 0.5f,
+        };
+        m_HeadObject->m_Transform.scale = this->m_Transform.scale;
+        m_HeadObject->m_Transform.rotation = 0.0f;
+        return;
+    }
+
     const glm::vec2 bodySize = GetDrawableSize(currentBody);
     const glm::vec2 headSize = GetDrawableSize(currentHead);
 
     // head 相對於 body 的自動偏移（置於 body 上方）
     const glm::vec2 autoOffset = {0.0f, (bodySize.y * 0.5f + headSize.y * 0.5f)};
-    m_HeadObject->m_Transform.translation = m_HeadOffset + autoOffset;
+
+    glm::vec2 stateOffset = {0.0f, 0.0f};
+    if (m_MotionState == MotionState::Jump) {
+        stateOffset = m_JumpHeadOffset;
+    } else if (m_UseAirborneRunHeadOffset) {
+        stateOffset = m_AirborneRunHeadOffset;
+    }
+
+    m_HeadObject->m_Transform.translation = m_HeadOffset + autoOffset + stateOffset;
+
+    const float headWidthScale =
+        (m_MotionState == MotionState::Move) ? m_MoveHeadWidthScale : 1.0f;
+    m_HeadObject->m_Transform.scale = {
+        this->m_Transform.scale.x * headWidthScale,
+        this->m_Transform.scale.y,
+    };
 }
 
 void HeadBodyCharacter::RefreshDrawables() {
     if (m_BodyObject) {
         m_BodyObject->SetDrawable(GetActiveBodyDrawable());
+        m_BodyObject->SetVisible(m_MotionState != MotionState::Win);
     }
 
     if (m_HeadObject) {
         m_HeadObject->SetDrawable(GetActiveHeadDrawable());
+        m_HeadObject->SetVisible(true);
     }
 }
 
@@ -434,6 +525,11 @@ std::shared_ptr<Core::Drawable> HeadBodyCharacter::GetActiveHeadDrawable() const
     case MotionState::Fall:
         if (m_FallHeadDrawable) {
             return m_FallHeadDrawable;
+        }
+        break;
+    case MotionState::Win:
+        if (m_WinHeadDrawable) {
+            return m_WinHeadDrawable;
         }
         break;
     case MotionState::Move:

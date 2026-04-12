@@ -93,8 +93,8 @@ private:
     void UpdateGreenSwitch();
     void UpdateGreenPlatform();
     void UpdateCubePhysics();
-    bool CheckHazards();
-    void ResetLevelState();
+    void CheckHazards();
+    void UpdateDeathSequence();
     void UpdateExitDoors();
     void UpdateVictorySequence();
     bool IsGreenButtonPressed() const;
@@ -114,6 +114,10 @@ private:
         const std::shared_ptr<HeadBodyCharacter>& character,
         const CharacterCollisionProfile& profile,
         const HazardRect& hazard
+    ) const;
+    bool IsCharacterInLiquid(
+        const std::shared_ptr<HeadBodyCharacter>& character,
+        const CharacterCollisionProfile& profile
     ) const;
     void CarryCharacterWithPlatform(
         const std::shared_ptr<HeadBodyCharacter>& character,
@@ -280,17 +284,28 @@ private:
     glm::vec2 m_FireboySpawnPosition = {0.0f, 0.0f};
     glm::vec2 m_WatergirlSpawnPosition = {0.0f, 0.0f};
     glm::vec2 m_CubeSpawnPosition = {0.0f, 0.0f};
+    glm::vec2 m_FireboyDeathStartScale = {1.0f, 1.0f};
+    glm::vec2 m_WatergirlDeathStartScale = {1.0f, 1.0f};
     bool m_FireboyOnGround = false;
     bool m_WatergirlOnGround = false;
     bool m_CubeOnGround = false;
 
-    float m_MoveSpeed = 1.8f;
+    float m_MoveSpeed = 2.35f;
     float m_GroundAcceleration = 0.10f;
-    float m_AirAcceleration = 0.05f;
+    float m_AirAcceleration = 0.095f;
     float m_GroundDeceleration = 0.07f;
-    float m_AirDeceleration = 0.010f;
-    float m_JumpSpeed = 5.2f;
+    float m_AirDeceleration = 0.004f;
+    float m_JumpSpeed = 4.5f;
     float m_Gravity = 0.11f;
+    float m_LiquidMoveSpeedScale = 0.72f;
+    float m_LiquidAccelerationScale = 0.70f;
+    float m_LiquidDecelerationScale = 0.80f;
+    float m_LiquidJumpScale = 0.55f;
+    float m_LiquidGravityScale = 0.55f;
+    float m_LiquidVelocityDrag = 0.95f;
+    float m_DeathAnimationDuration = 0.28f;
+    float m_DeathSinkSpeed = 0.95f;
+    float m_DeathEndScale = 0.52f;
     float m_GroundSnapTolerance = 4.0f;
     float m_GroundStickTolerance = 14.0f;
     float m_CeilingStickTolerance = 10.0f;
@@ -341,6 +356,8 @@ private:
     bool m_GreenButtonPressed = false;
     bool m_GreenSwitchOn = false;
     bool m_GreenSwitchTouchLatch = false;
+    float m_FireboyDeathTimer = 0.0f;
+    float m_WatergirlDeathTimer = 0.0f;
     float m_GreenPlatformSpeed = 2.2f;
     float m_CubePushSpeed = 1.15f;
     float m_CubePushAcceleration = 0.10f;

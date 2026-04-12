@@ -52,7 +52,11 @@ void App::Start() {
     m_WaterDiamondsTotal = 0;
     m_GreenDiamondsTotal = 0;
     m_CubeVelocity = {0.0f, 0.0f};
+    m_FireboyDeathStartScale = {1.0f, 1.0f};
+    m_WatergirlDeathStartScale = {1.0f, 1.0f};
     m_CubeOnGround = false;
+    m_FireboyDeathTimer = 0.0f;
+    m_WatergirlDeathTimer = 0.0f;
     m_FireboyDoor = {};
     m_WatergirlDoor = {};
     m_VictoryPhase = VictoryPhase::None;
@@ -265,17 +269,33 @@ void App::Start() {
         return prop;
     };
 
-    auto addAnimatedHazardAtBottom = [&](const std::vector<std::string>& paths,
-                                         const HazardRect& hazardRect,
-                                         float centerXImage,
-                                         float bottomYImage,
-                                         float imageWidth,
-                                         float imageHeight,
-                                         float zIndex) {
+    auto addAnimatedHazardInImageTrap = [&](const std::vector<std::string>& paths,
+                                            HazardRect::Type type,
+                                            float assetWidthImage,
+                                            float assetHeightImage,
+                                            float topLeftXImage,
+                                            float topLeftYImage,
+                                            float topRightXImage,
+                                            float topRightYImage,
+                                            float bottomLeftXImage,
+                                            float bottomLeftYImage,
+                                            float bottomRightXImage,
+                                            float bottomRightYImage,
+                                            float zIndex) {
         auto hazardAnimation = std::make_shared<Util::Animation>(paths, true, 120, true, 0);
-        const glm::vec2 size = imageSizeToWorldSize(imageWidth, imageHeight);
+        const float topWidthImage = std::abs(topRightXImage - topLeftXImage);
+        const float bottomWidthImage = std::abs(bottomRightXImage - bottomLeftXImage);
+        const float topYImage = (topLeftYImage + topRightYImage) * 0.5f;
+        const float bottomYImage = (bottomLeftYImage + bottomRightYImage) * 0.5f;
+        const float imageHeight = std::abs(bottomYImage - topYImage);
+        const float overlayWidthImage = topWidthImage + std::min(36.0f, topWidthImage * 0.13f);
+        const float overlayHeightImage =
+            overlayWidthImage * (assetHeightImage / assetWidthImage) * 0.39f;
+        const glm::vec2 size = imageSizeToWorldSize(overlayWidthImage, overlayHeightImage);
         hazardAnimation->SetSize(size);
 
+        const float centerXImage =
+            (topLeftXImage + topRightXImage + bottomLeftXImage + bottomRightXImage) * 0.25f;
         glm::vec2 pos = ImagePointToWorldPoint(centerXImage, bottomYImage);
         pos.y += size.y * 0.5f;
 
@@ -283,7 +303,40 @@ void App::Start() {
         hazardObject->m_Transform.translation = pos;
         m_Root.AddChild(hazardObject);
         m_AnimatedLevelProps.push_back(hazardObject);
-        m_Hazards.push_back(hazardRect);
+
+        const float surfaceInset = std::min(6.0f, topWidthImage * 0.03f);
+        const float bodyInset = std::min(6.0f, bottomWidthImage * 0.04f);
+        const float upperBandBottomY = topYImage + imageHeight * 0.42f;
+
+        HazardRect surfaceHazard;
+        {
+            const SolidRect rect = ImageRectToWorldRect(
+                std::min(topLeftXImage, topRightXImage) + surfaceInset,
+                topYImage,
+                std::max(topLeftXImage, topRightXImage) - surfaceInset,
+                upperBandBottomY,
+                false
+            );
+            surfaceHazard.center = rect.center;
+            surfaceHazard.size = rect.size;
+            surfaceHazard.type = type;
+            m_Hazards.push_back(surfaceHazard);
+        }
+
+        HazardRect bodyHazard;
+        {
+            const SolidRect rect = ImageRectToWorldRect(
+                std::min(bottomLeftXImage, bottomRightXImage) + bodyInset,
+                upperBandBottomY - 1.0f,
+                std::max(bottomLeftXImage, bottomRightXImage) - bodyInset,
+                bottomYImage,
+                false
+            );
+            bodyHazard.center = rect.center;
+            bodyHazard.size = rect.size;
+            bodyHazard.type = type;
+            m_Hazards.push_back(bodyHazard);
+        }
 
         return hazardObject;
     };
@@ -336,31 +389,77 @@ void App::Start() {
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/water_03.png",
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/water_04.png",
     };
-    HazardRect lowerLavaHazard;
-    {
-        const SolidRect rect = ImageRectToWorldRect(1162.0f, 1738.0f, 1336.0f, 1760.0f);
-        lowerLavaHazard.center = rect.center;
-        lowerLavaHazard.size = rect.size;
-        lowerLavaHazard.type = HazardRect::Type::Lava;
-    }
-    HazardRect lowerWaterHazard;
-    {
-        const SolidRect rect = ImageRectToWorldRect(1659.0f, 1738.0f, 1833.0f, 1760.0f);
-        lowerWaterHazard.center = rect.center;
-        lowerWaterHazard.size = rect.size;
-        lowerWaterHazard.type = HazardRect::Type::Water;
-    }
 
-    // Approximate Level 1 dressing. We can fine-tune these image coordinates together.
-    addAnimatedHazardAtBottom(
+    // Animated hazard pools mapped from the hand-traced image regions.
+    addAnimatedHazardInImageTrap(
         lavaPaths,
-        lowerLavaHazard,
-        1244.5f, 1760.0f, 275.0f, 275.0f * (61.0f / 177.0f), 6.7f
+        HazardRect::Type::Lava,
+        177.0f, 61.0f,
+        436.0f, 1225.0f,
+        715.0f, 1223.0f,
+        490.0f, 1255.0f,
+        669.0f, 1255.0f,
+        10.2f
     );
-    addAnimatedHazardAtBottom(
+    addAnimatedHazardInImageTrap(
+        lavaPaths,
+        HazardRect::Type::Lava,
+        177.0f, 61.0f,
+        426.0f, 673.0f,
+        705.0f, 671.0f,
+        480.0f, 703.0f,
+        659.0f, 703.0f,
+        10.2f
+    );
+    addAnimatedHazardInImageTrap(
+        lavaPaths,
+        HazardRect::Type::Lava,
+        177.0f, 61.0f,
+        1110.0f, 1714.0f,
+        1389.0f, 1712.0f,
+        1164.0f, 1744.0f,
+        1343.0f, 1744.0f,
+        10.2f
+    );
+    addAnimatedHazardInImageTrap(
         waterPaths,
-        lowerWaterHazard,
-        1741.5f, 1760.0f, 275.0f, 275.0f * (60.0f / 178.0f), 6.7f
+        HazardRect::Type::Water,
+        178.0f, 60.0f,
+        1542.0f, 364.0f,
+        1821.0f, 362.0f,
+        1596.0f, 394.0f,
+        1775.0f, 394.0f,
+        10.2f
+    );
+    addAnimatedHazardInImageTrap(
+        waterPaths,
+        HazardRect::Type::Water,
+        178.0f, 60.0f,
+        1473.0f, 979.0f,
+        1752.0f, 977.0f,
+        1527.0f, 1009.0f,
+        1706.0f, 1009.0f,
+        10.2f
+    );
+    addAnimatedHazardInImageTrap(
+        waterPaths,
+        HazardRect::Type::Water,
+        178.0f, 60.0f,
+        1481.0f, 1343.0f,
+        1760.0f, 1341.0f,
+        1535.0f, 1373.0f,
+        1714.0f, 1373.0f,
+        10.2f
+    );
+    addAnimatedHazardInImageTrap(
+        waterPaths,
+        HazardRect::Type::Water,
+        178.0f, 60.0f,
+        1601.0f, 1713.0f,
+        1880.0f, 1711.0f,
+        1655.0f, 1743.0f,
+        1834.0f, 1743.0f,
+        10.2f
     );
 
     m_GreenSwitch = addPropAtBottom(
@@ -388,9 +487,9 @@ void App::Start() {
     };
     m_FireboyDoor.sprite = addPropAtBottom(
         m_FireboyDoor.closedImagePath,
-        1965.0f, 362.0f, 160.0f, 188.0f, 7.2f, propScale
+        1965.0f, 362.0f, 160.0f, 205.0f, 7.2f, propScale
     );
-    const glm::vec2 fireboyDoorSize = imageSizeToWorldSize(160.0f, 188.0f, propScale);
+    const glm::vec2 fireboyDoorSize = imageSizeToWorldSize(160.0f, 205.0f, propScale);
     m_FireboyDoor.triggerRect.center = m_FireboyDoor.sprite->GetPosition() + glm::vec2{
         0.0f,
         -fireboyDoorSize.y * 0.14f,
@@ -410,9 +509,9 @@ void App::Start() {
     };
     m_WatergirlDoor.sprite = addPropAtBottom(
         m_WatergirlDoor.closedImagePath,
-        2140.0f, 362.0f, 162.0f, 188.0f, 7.2f, propScale
+        2140.0f, 362.0f, 162.0f, 205.0f, 7.2f, propScale
     );
-    const glm::vec2 watergirlDoorSize = imageSizeToWorldSize(162.0f, 188.0f, propScale);
+    const glm::vec2 watergirlDoorSize = imageSizeToWorldSize(162.0f, 205.0f, propScale);
     m_WatergirlDoor.triggerRect.center = m_WatergirlDoor.sprite->GetPosition() + glm::vec2{
         watergirlDoorSize.x * 0.02f,
         -watergirlDoorSize.y * 0.10f,
@@ -661,6 +760,7 @@ void App::Start() {
         m_Fireboy->SetJumpHeadImage(jumpHeadPaths, 120, true);
         m_Fireboy->SetFallHeadImage(fallHeadPaths, 120, true);
         m_Fireboy->SetWinHeadImage(winHeadPaths, 90, true);
+        m_Fireboy->SetLifeState(HeadBodyCharacter::LifeState::Alive);
         m_Fireboy->SetMotionState(HeadBodyCharacter::MotionState::Idle);
 
         if (m_SolidBlocks.size() >= 3) {
@@ -804,6 +904,7 @@ void App::Start() {
         m_Watergirl->SetJumpHeadImage(jumpHeadPaths, 120, true);
         m_Watergirl->SetFallHeadImage(fallHeadPaths, 120, true);
         m_Watergirl->SetWinHeadImage(winHeadPaths, 90, true);
+        m_Watergirl->SetLifeState(HeadBodyCharacter::LifeState::Alive);
         m_Watergirl->SetMotionState(HeadBodyCharacter::MotionState::Idle);
 
         if (m_SolidBlocks.size() >= 3) {

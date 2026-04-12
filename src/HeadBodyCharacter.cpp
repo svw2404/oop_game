@@ -390,6 +390,15 @@ void HeadBodyCharacter::SetAirborneRunHeadOffsetEnabled(bool enabled) {
     this->SetPosition(this->m_Transform.translation);
 }
 
+void HeadBodyCharacter::SetLifeState(LifeState state) {
+    if (m_LifeState == state) {
+        return;
+    }
+
+    m_LifeState = state;
+    RefreshDrawables();
+}
+
 glm::vec2 HeadBodyCharacter::GetBodySize() const {
     auto currentBody = GetActiveBodyDrawable();
     if (!currentBody) {
@@ -492,6 +501,18 @@ void HeadBodyCharacter::UpdateHeadTransform() {
 }
 
 void HeadBodyCharacter::RefreshDrawables() {
+    if (m_LifeState == LifeState::Dead) {
+        if (m_BodyObject) {
+            m_BodyObject->SetVisible(false);
+        }
+
+        if (m_HeadObject) {
+            m_HeadObject->SetVisible(false);
+        }
+
+        return;
+    }
+
     if (m_BodyObject) {
         m_BodyObject->SetDrawable(GetActiveBodyDrawable());
         m_BodyObject->SetVisible(m_MotionState != MotionState::Win);

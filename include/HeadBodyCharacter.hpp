@@ -11,6 +11,12 @@
 
 class HeadBodyCharacter : public Character {
 public:
+    enum class LifeState {
+        Alive,
+        Dying,
+        Dead,
+    };
+
     enum class MotionState {
         Idle,
         Move,
@@ -108,6 +114,9 @@ public:
     void SetScale(const glm::vec2& scale);
     void SetHeadRotation(float radians);
     void SetAirborneRunHeadOffsetEnabled(bool enabled);
+    void SetLifeState(LifeState state);
+    [[nodiscard]] LifeState GetLifeState() const { return m_LifeState; }
+    [[nodiscard]] bool IsAlive() const { return m_LifeState == LifeState::Alive; }
 
     [[nodiscard]] glm::vec2 GetBodySize() const;
     [[nodiscard]] glm::vec2 GetHeadSize() const;
@@ -145,6 +154,7 @@ private:
     bool m_UseAirborneRunHeadOffset{false};
     bool m_UseIdleWhenIdle{false};
     bool m_IsIdle{false};
+    LifeState m_LifeState{LifeState::Alive};
     MotionState m_MotionState{MotionState::Move};
 };
 

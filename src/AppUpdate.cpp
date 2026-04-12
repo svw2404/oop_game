@@ -29,10 +29,8 @@ void App::Update() {
 
         UpdateGreenSwitch();
         UpdateGreenPlatform();
-        if (CheckHazards()) {
-            m_Root.Update();
-            return;
-        }
+        CheckHazards();
+        UpdateDeathSequence();
         CheckDiamondCollection();
         UpdateExitDoors();
 
@@ -87,7 +85,7 @@ void App::HandleCharacterInput(
     Util::Keycode rightKey,
     Util::Keycode jumpKey
 ) {
-    if (!character) {
+    if (!character || !character->IsAlive()) {
         return;
     }
 
@@ -109,11 +107,18 @@ void App::HandleCharacterInput(
         character->SetScale({1.0f, 1.0f});
     }
 
-    const float acceleration = onGround ? m_GroundAcceleration : m_AirAcceleration;
-    const float deceleration = onGround ? m_GroundDeceleration : m_AirDeceleration;
+    const bool inLiquid = IsCharacterInLiquid(character, profile);
+    const float liquidSpeedScale = inLiquid ? m_LiquidMoveSpeedScale : 1.0f;
+    const float liquidAccelerationScale = inLiquid ? m_LiquidAccelerationScale : 1.0f;
+    const float liquidDecelerationScale = inLiquid ? m_LiquidDecelerationScale : 1.0f;
+
+    const float acceleration =
+        (onGround ? m_GroundAcceleration : m_AirAcceleration) * liquidAccelerationScale;
+    const float deceleration =
+        (onGround ? m_GroundDeceleration : m_AirDeceleration) * liquidDecelerationScale;
 
     if (inputDir != 0.0f) {
-        const float targetSpeed = inputDir * m_MoveSpeed;
+        const float targetSpeed = inputDir * m_MoveSpeed * liquidSpeedScale;
         if (velocity.x < targetSpeed) {
             velocity.x = std::min(targetSpeed, velocity.x + acceleration);
         } else if (velocity.x > targetSpeed) {
@@ -148,7 +153,7 @@ void App::HandleCharacterInput(
     character->SetPosition(newPos);
 
     if (Util::Input::IsKeyPressed(jumpKey) && onGround) {
-        velocity.y = m_JumpSpeed;
+        velocity.y = m_JumpSpeed * (inLiquid ? m_LiquidJumpScale : 1.0f);
         onGround = false;
     }
 }
@@ -167,14 +172,19 @@ void App::UpdateCharacterPhysics(
     bool& onGround,
     const CharacterCollisionProfile& profile
 ) {
-    if (!character) {
+    if (!character || !character->IsAlive()) {
         return;
     }
 
     glm::vec2 oldPos = character->GetPosition();
     glm::vec2 newPos = oldPos;
 
-    velocity.y -= m_Gravity;
+    const bool inLiquid = IsCharacterInLiquid(character, profile);
+    velocity.y -= m_Gravity * (inLiquid ? m_LiquidGravityScale : 1.0f);
+    if (inLiquid) {
+        velocity.x *= m_LiquidVelocityDrag;
+        velocity.y *= m_LiquidVelocityDrag;
+    }
     newPos.y += velocity.y;
 
     ResolveVerticalCollisions(oldPos, newPos, profile, velocity, onGround);
@@ -186,7 +196,7 @@ void App::UpdateCharacterMotionState(
     const glm::vec2& velocity,
     bool onGround
 ) {
-    if (!character) {
+    if (!character || !character->IsAlive()) {
         return;
     }
 
@@ -342,7 +352,7 @@ void App::UpdateVictorySequence() {
     }
 }
 
-bool App::CheckHazards() {
+void App::CheckHazards() {
     auto isFatal = [](HazardRect::Type type, bool isFireboy) {
         switch (type) {
         case HazardRect::Type::Lava:
@@ -357,92 +367,64 @@ bool App::CheckHazards() {
     for (const auto& hazard : m_Hazards) {
         if (isFatal(hazard.type, true) &&
             CharacterTouchesHazard(m_Fireboy, m_FireboyCollision, hazard)) {
-            ResetLevelState();
-            return true;
+            m_FireboyVelocity = {0.0f, 0.0f};
+            m_FireboyOnGround = false;
+            m_Fireboy->SetAirborneRunHeadOffsetEnabled(false);
+            m_Fireboy->SetHeadRotation(0.0f);
+            m_Fireboy->SetMotionState(HeadBodyCharacter::MotionState::Fall);
+            m_FireboyDeathStartScale = m_Fireboy->GetTransform().scale;
+            m_FireboyDeathTimer = 0.0f;
+            m_Fireboy->SetLifeState(HeadBodyCharacter::LifeState::Dying);
         }
 
         if (isFatal(hazard.type, false) &&
             CharacterTouchesHazard(m_Watergirl, m_WatergirlCollision, hazard)) {
-            ResetLevelState();
-            return true;
+            m_WatergirlVelocity = {0.0f, 0.0f};
+            m_WatergirlOnGround = false;
+            m_Watergirl->SetAirborneRunHeadOffsetEnabled(false);
+            m_Watergirl->SetHeadRotation(0.0f);
+            m_Watergirl->SetMotionState(HeadBodyCharacter::MotionState::Fall);
+            m_WatergirlDeathStartScale = m_Watergirl->GetTransform().scale;
+            m_WatergirlDeathTimer = 0.0f;
+            m_Watergirl->SetLifeState(HeadBodyCharacter::LifeState::Dying);
         }
     }
-
-    return false;
 }
 
-void App::ResetLevelState() {
-    m_VictoryPhase = VictoryPhase::None;
-    m_VictoryTimer = 0.0f;
-
-    m_FireboyVelocity = {0.0f, 0.0f};
-    m_WatergirlVelocity = {0.0f, 0.0f};
-    m_CubeVelocity = {0.0f, 0.0f};
-    m_FireboyOnGround = true;
-    m_WatergirlOnGround = true;
-    m_CubeOnGround = true;
-
-    if (m_Fireboy) {
-        m_Fireboy->SetAirborneRunHeadOffsetEnabled(false);
-        m_Fireboy->SetHeadRotation(0.0f);
-        m_Fireboy->SetScale({1.0f, 1.0f});
-        m_Fireboy->SetMotionState(HeadBodyCharacter::MotionState::Idle);
-        m_Fireboy->SetPosition(m_FireboySpawnPosition);
-        s_LastPos[m_Fireboy.get()] = m_FireboySpawnPosition;
-    }
-
-    if (m_Watergirl) {
-        m_Watergirl->SetAirborneRunHeadOffsetEnabled(false);
-        m_Watergirl->SetHeadRotation(0.0f);
-        m_Watergirl->SetScale({1.0f, 1.0f});
-        m_Watergirl->SetMotionState(HeadBodyCharacter::MotionState::Idle);
-        m_Watergirl->SetPosition(m_WatergirlSpawnPosition);
-        s_LastPos[m_Watergirl.get()] = m_WatergirlSpawnPosition;
-    }
-
-    m_GreenButtonPressed = false;
-    m_GreenSwitchOn = false;
-    m_GreenSwitchTouchLatch = false;
-    if (m_GreenSwitch) {
-        m_GreenSwitch->SetImage(std::string(GA_RESOURCE_DIR) + "/Image/Assets/switch_green_off.png");
-    }
-
-    if (m_HasGreenPlatformBlock && m_GreenPlatformBlockIndex < m_SolidBlocks.size()) {
-        m_GreenPlatformCurrentRect = m_GreenPlatformRestRect;
-        m_SolidBlocks[m_GreenPlatformBlockIndex] = m_GreenPlatformCurrentRect;
-        if (m_GreenPlatform) {
-            m_GreenPlatform->SetPosition(m_GreenPlatformCurrentRect.center);
+void App::UpdateDeathSequence() {
+    auto updateCharacterDeath = [&](const std::shared_ptr<HeadBodyCharacter>& character,
+                                    float& deathTimer,
+                                    const glm::vec2& deathStartScale,
+                                    glm::vec2& velocity) {
+        if (!character || character->GetLifeState() != HeadBodyCharacter::LifeState::Dying) {
+            return;
         }
-    }
 
-    m_CubeRect = m_CubeSpawnRect;
-    if (m_HasCubeBlock && m_CubeBlockIndex < m_SolidBlocks.size()) {
-        m_SolidBlocks[m_CubeBlockIndex] = m_CubeRect;
-    }
-    if (m_Cube) {
-        m_Cube->SetPosition(m_CubeSpawnPosition);
-    }
+        deathTimer = std::min(m_DeathAnimationDuration, deathTimer + FIXED_TIME_STEP);
+        const float t = std::clamp(deathTimer / m_DeathAnimationDuration, 0.0f, 1.0f);
+        const float scaleMagnitude = 1.0f + (m_DeathEndScale - 1.0f) * t;
+        const float scaleXSign = deathStartScale.x < 0.0f ? -1.0f : 1.0f;
+        const float scaleYSign = deathStartScale.y < 0.0f ? -1.0f : 1.0f;
 
-    m_FireboyDoor.occupied = false;
-    m_WatergirlDoor.occupied = false;
-    m_FireboyDoor.openProgress = 0.0f;
-    m_WatergirlDoor.openProgress = 0.0f;
-    if (m_FireboyDoor.sprite) {
-        m_FireboyDoor.sprite->SetImage(m_FireboyDoor.closedImagePath);
-    }
-    if (m_WatergirlDoor.sprite) {
-        m_WatergirlDoor.sprite->SetImage(m_WatergirlDoor.closedImagePath);
-    }
+        character->SetScale({
+            scaleXSign * scaleMagnitude,
+            scaleYSign * scaleMagnitude,
+        });
+        character->SetHeadRotation(0.0f);
 
-    m_FireDiamondsCollected = 0;
-    m_WaterDiamondsCollected = 0;
-    m_GreenDiamondsCollected = 0;
-    for (auto& diamond : m_Diamonds) {
-        diamond.collected = false;
-        if (diamond.sprite) {
-            diamond.sprite->SetVisible(true);
+        glm::vec2 pos = character->GetPosition();
+        pos.y -= m_DeathSinkSpeed * (0.85f + 0.15f * t);
+        character->SetPosition(pos);
+
+        velocity = {0.0f, 0.0f};
+
+        if (t >= 1.0f) {
+            character->SetLifeState(HeadBodyCharacter::LifeState::Dead);
         }
-    }
+    };
+
+    updateCharacterDeath(m_Fireboy, m_FireboyDeathTimer, m_FireboyDeathStartScale, m_FireboyVelocity);
+    updateCharacterDeath(m_Watergirl, m_WatergirlDeathTimer, m_WatergirlDeathStartScale, m_WatergirlVelocity);
 }
 
 void App::UpdateGreenSwitch() {
@@ -472,7 +454,7 @@ void App::CheckDiamondCollection() {
     auto touchesDiamond = [&](const std::shared_ptr<HeadBodyCharacter>& character,
                               const CharacterCollisionProfile& profile,
                               const CollectibleDiamond& diamond) {
-        if (!character) {
+        if (!character || !character->IsAlive()) {
             return false;
         }
 
@@ -779,7 +761,7 @@ bool App::CharacterTouchesRect(
     const CharacterCollisionProfile& profile,
     const SolidRect& rect
 ) const {
-    if (!character) {
+    if (!character || !character->IsAlive()) {
         return false;
     }
 
@@ -799,7 +781,7 @@ bool App::CharacterTouchesHazard(
     const CharacterCollisionProfile& profile,
     const HazardRect& hazard
 ) const {
-    if (!character) {
+    if (!character || !character->IsAlive()) {
         return false;
     }
 
@@ -814,13 +796,30 @@ bool App::CharacterTouchesHazard(
            CheckAABB(headCenter, headSize, hazard.center, hazard.size);
 }
 
+bool App::IsCharacterInLiquid(
+    const std::shared_ptr<HeadBodyCharacter>& character,
+    const CharacterCollisionProfile& profile
+) const {
+    if (!character || !character->IsAlive()) {
+        return false;
+    }
+
+    for (const auto& hazard : m_Hazards) {
+        if (CharacterTouchesHazard(character, profile, hazard)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void App::CarryCharacterWithPlatform(
     const std::shared_ptr<HeadBodyCharacter>& character,
     const CharacterCollisionProfile& profile,
     const SolidRect& oldPlatform,
     float platformDeltaY
 ) const {
-    if (!character || std::abs(platformDeltaY) < 0.001f) {
+    if (!character || !character->IsAlive() || std::abs(platformDeltaY) < 0.001f) {
         return;
     }
 
@@ -857,7 +856,8 @@ void App::CarryCharacterWithCube(
     const SolidRect& oldCube,
     const glm::vec2& cubeDelta
 ) const {
-    if (!character || (std::abs(cubeDelta.x) < 0.001f && std::abs(cubeDelta.y) < 0.001f)) {
+    if (!character || !character->IsAlive() ||
+        (std::abs(cubeDelta.x) < 0.001f && std::abs(cubeDelta.y) < 0.001f)) {
         return;
     }
 

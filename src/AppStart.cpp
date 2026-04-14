@@ -12,6 +12,8 @@ static std::unordered_map<HeadBodyCharacter*, glm::vec2> s_LastPos;
 
 void App::Start() {
     LOG_TRACE("Start");
+    // Rebuild the whole scene graph on every Start() so restarting the level
+    // creates a fresh world instead of stacking duplicate drawables.
     m_Root = Util::Renderer();
 
     // -------------------------------------------------------------------------
@@ -75,6 +77,11 @@ void App::Start() {
     m_FailHomeButton = {};
     m_FailExitButton = {};
 
+    // Base collision setup:
+    // - m_SolidBlocks stores the terrain mass used by AABB collision.
+    // - m_Slopes stores only the smooth walkable diagonals.
+    // Together they let us fake irregular temple geometry with stable runtime
+    // collision while still preserving smooth ramps for characters/cube.
     m_SolidBlocks.push_back(ImageRectToWorldRect(0.0f, 0.0f, 2380.0f, 45.0f));       // Roof
     // Left floor segment before the two lower depressions. Keep this as index 1
     // because spawn logic below expects m_SolidBlocks[1] to be floor.
@@ -85,6 +92,9 @@ void App::Start() {
     m_TestBlock = ImageRectToWorldRect(46.0f, 1466.0f, 784.0f, 1519.0f);
     m_SolidBlocks.push_back(m_TestBlock);
 
+    // Hand-authored level decomposition for Level 1.
+    // Most terrain is approximated with rectangles, then the visible diagonal
+    // connectors are added separately as slope surfaces later in this file.
     const std::vector<SolidRect> perimeterBlocks = {
         // Flat floor between / after the two lower depressions.
         ImageRectToWorldRect(1155.0f, 1743.0f, 1342.0f, 1760.0f),
@@ -201,7 +211,9 @@ void App::Start() {
     };
     m_SolidBlocks.insert(m_SolidBlocks.end(), perimeterBlocks.begin(), perimeterBlocks.end());
 
-    // Green button platform:
+    // Moving platform setup:
+    // the platform is a real solid block inside m_SolidBlocks, while the sprite
+    // is just the visual. Pressing either green button moves the block down.
     // The platform travels vertically through the hand-mapped passage
     // x=55..292, y=904..1225. It starts high to block the route, then lowers
     // while the nearby pressure button is held.
@@ -256,6 +268,8 @@ void App::Start() {
     // -------------------------------------------------------------------------
     // 3.5) Level 1 prop pass
     // -------------------------------------------------------------------------
+    // Everything here is visual or gameplay dressing placed on top of the
+    // terrain data: hazards, doors, switch, cube, and collectible diamonds.
     const float scaleX = m_BackgroundDisplayedSize.x / m_BackgroundOriginalSize.x;
     const float scaleY = m_BackgroundDisplayedSize.y / m_BackgroundOriginalSize.y;
 
@@ -263,6 +277,9 @@ void App::Start() {
         return glm::vec2{imageWidth * scaleX * scale, imageHeight * scaleY * scale};
     };
 
+    // Helper for static props whose intended authoring rule is "sit on this
+    // floor Y in image space". We convert image coordinates into world space
+    // and anchor the sprite by its bottom edge.
     auto addPropAtBottom = [&](const std::string& path,
                                float centerXImage,
                                float bottomYImage,
@@ -282,6 +299,9 @@ void App::Start() {
         return prop;
     };
 
+    // Helper for animated liquid pools inside trapezoid-like depressions.
+    // Visuals use a wider overlay so the sprite covers the baked background
+    // art, while gameplay uses tighter hazard bands for fair collision.
     auto addAnimatedHazardInImageTrap = [&](const std::vector<std::string>& paths,
                                             HazardRect::Type type,
                                             float assetWidthImage,
@@ -354,6 +374,8 @@ void App::Start() {
         return hazardObject;
     };
 
+    // Diamonds are scene props with independent collection logic. They are not
+    // terrain colliders and can be color-restricted per character.
     auto addCollectibleDiamond = [&](const std::string& path,
                                      DiamondType type,
                                      float centerXImage,
@@ -404,6 +426,7 @@ void App::Start() {
     };
 
     // Animated hazard pools mapped from the hand-traced image regions.
+    // These are the current runtime lava/water zones used by wrong-element death.
     addAnimatedHazardInImageTrap(
         lavaPaths,
         HazardRect::Type::Lava,
@@ -490,6 +513,9 @@ void App::Start() {
     };
 
     // Top exit doors.
+    // Each door has:
+    // - a visual sprite with open/close animation frames
+    // - a trigger rect checked against the matching character only
     m_FireboyDoor.closedImagePath =
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_closed.png";
     m_FireboyDoor.openingImagePaths = {
@@ -654,9 +680,62 @@ void App::Start() {
         {ImagePointToWorldPoint(910.0f, 1285.0f), ImagePointToWorldPoint(1027.0f, 1398.0f)},
     };
 
+    // Solidify slope seams and underside gaps. The walkable line slope logic is
+    // still the main behavior, but these overlapping guard pieces make the
+    // terrain mass continuous so stronger jumps cannot ghost through tiny
+    // blanks at slope starts, ends, or undersides.
+    auto addSlopeGuardBand = [&](const auto& slopes, float solidSideSign) {
+        constexpr float guardHeight = 9.0f;
+        constexpr float guardExtraOverlap = 7.0f;
+        constexpr float endpointGuardSize = 12.0f;
+
+        for (const auto& slope : slopes) {
+            const glm::vec2 delta = slope.end - slope.start;
+            const float slopeLength = glm::length(delta);
+            if (slopeLength < 0.001f) {
+                continue;
+            }
+
+            const int segments = std::max(3, static_cast<int>(std::ceil(slopeLength / 10.0f)));
+            const float guardWidth = (slopeLength / static_cast<float>(segments)) + guardExtraOverlap;
+
+            for (int i = 0; i <= segments; ++i) {
+                const float t = static_cast<float>(i) / static_cast<float>(segments);
+                const glm::vec2 point = slope.start + delta * t;
+
+                SolidRect guard;
+                guard.center = {
+                    point.x,
+                    point.y + solidSideSign * (guardHeight * 0.5f - 0.35f),
+                };
+                guard.size = {guardWidth, guardHeight};
+                guard.blockBottom = true;
+                m_SolidBlocks.push_back(guard);
+            }
+
+            for (const glm::vec2 endpoint : {slope.start, slope.end}) {
+                SolidRect endpointGuard;
+                endpointGuard.center = {
+                    endpoint.x,
+                    endpoint.y + solidSideSign * (endpointGuardSize * 0.5f - 0.35f),
+                };
+                endpointGuard.size = {endpointGuardSize, endpointGuardSize};
+                endpointGuard.blockBottom = true;
+                m_SolidBlocks.push_back(endpointGuard);
+            }
+        }
+    };
+
+    // Floor slopes: solid mass exists under the walkable line.
+    addSlopeGuardBand(m_Slopes, -1.0f);
+    // Ceiling slopes: solid mass exists above the line.
+    addSlopeGuardBand(m_CeilingSlopes, 1.0f);
+
     // -------------------------------------------------------------------------
     // 4) Fireboy
     // -------------------------------------------------------------------------
+    // Fireboy/Watergirl share the same body+head controller architecture.
+    // The difference is mainly asset folders, controls, and element rules.
     {
         const std::string bodyDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Body";
         const std::string idleDir = std::string(GA_RESOURCE_DIR) + "/Image/Character/Fireboy/Idle";
@@ -968,6 +1047,10 @@ void App::Start() {
     // -------------------------------------------------------------------------
     // 7) Fail overlay
     // -------------------------------------------------------------------------
+    // This is intentionally structured like future UI buttons:
+    // - current branch uses text labels
+    // - each button already stores its future asset path so swapping to real
+    //   sprites later should not require rewriting the fail-state logic.
     m_FailOverlayPanel = std::make_shared<Character>(
         GA_RESOURCE_DIR "/Image/Assets/ui_fail_overlay_panel.png"
     );

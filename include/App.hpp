@@ -143,6 +143,31 @@ private:
     void UpdateGreenSwitch();
     void UpdateGreenPlatform();
     void UpdateCubePhysics();
+    void ResolveCubeHorizontalCollisions(
+        const SolidRect& oldCube,
+        SolidRect& newCube,
+        glm::vec2& velocity
+    ) const;
+    bool ResolveCubeSlopeGrounding(
+        const SolidRect& oldCube,
+        SolidRect& newCube,
+        glm::vec2& velocity,
+        bool& onGround
+    ) const;
+    bool FindBestCubeSlopeYAtX(
+        const SolidRect& oldCube,
+        float desiredCenterX,
+        float& outSlopeY
+    ) const;
+    void ApplyCubeSlopeFollow(
+        const SolidRect& oldCube,
+        SolidRect& newCube
+    ) const;
+    bool FindNearbyCubeGroundY(
+        const SolidRect& cube,
+        float maxDistance,
+        float& outGroundY
+    ) const;
     void CheckHazards();
     void UpdateDeathSequence();
     void UpdateExitDoors();
@@ -348,15 +373,15 @@ private:
     bool m_WatergirlOnGround = false;
     bool m_CubeOnGround = false;
 
-    float m_MoveSpeed = 3.55f;
+    float m_MoveSpeed = 3.75f;
     float m_GroundAcceleration = 0.10f;
-    float m_AirAcceleration = 0.20f;
+    float m_AirAcceleration = 0.23f;
     float m_GroundDeceleration = 0.07f;
-    float m_AirDeceleration = 0.001f;
-    float m_JumpSpeed = 4.5f;
-    float m_JumpHorizontalLaunchMin = 4.10f;
-    float m_JumpHorizontalLaunchMax = 7.40f;
-    float m_Gravity = 0.11f;
+    float m_AirDeceleration = 0.0005f;
+    float m_JumpSpeed = 4.80f;
+    float m_JumpHorizontalLaunchMin = 4.55f;
+    float m_JumpHorizontalLaunchMax = 8.10f;
+    float m_Gravity = 0.095f;
     float m_LiquidMoveSpeedScale = 0.72f;
     float m_LiquidAccelerationScale = 0.70f;
     float m_LiquidDecelerationScale = 0.80f;
@@ -366,9 +391,9 @@ private:
     float m_DeathAnimationDuration = 0.28f;
     float m_DeathSinkSpeed = 0.95f;
     float m_DeathEndScale = 0.52f;
-    float m_CeilingMomentumCarryDuration = 0.18f;
-    float m_CeilingMomentumCarryBoost = 1.18f;
-    float m_CeilingMomentumCarryFloor = 0.82f;
+    float m_CeilingMomentumCarryDuration = 0.28f;
+    float m_CeilingMomentumCarryBoost = 1.34f;
+    float m_CeilingMomentumCarryFloor = 0.94f;
     float m_GroundSnapTolerance = 4.0f;
     float m_GroundStickTolerance = 14.0f;
     float m_CeilingStickTolerance = 10.0f;

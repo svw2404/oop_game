@@ -9,6 +9,9 @@
 #include <unordered_map>
 
 namespace {
+// These constants tune how animation state is inferred from physics. They are
+// intentionally separate from movement speed so visual state changes remain
+// stable even if gameplay numbers are retuned.
 std::unordered_map<HeadBodyCharacter*, glm::vec2> s_LastPos;
 constexpr float IDLE_EPSILON = 0.5f;
 constexpr float AIR_STATE_EPSILON = 0.15f;
@@ -18,6 +21,11 @@ constexpr float FIXED_TIME_STEP = 1.0f / 60.0f;
 }
 
 void App::Update() {
+    // Main frame orchestration:
+    // 1. Early-out to fail overlay if both characters are already dead
+    // 2. Update dynamic world objects first (cube/platform/switch)
+    // 3. Process character input + physics
+    // 4. Resolve hazards, pickups, doors, and victory
     if (IsFailOverlayVisible()) {
         UpdateFailOverlay();
 
@@ -131,6 +139,8 @@ void App::HandleCharacterInput(
         character->SetScale({1.0f, 1.0f});
     }
 
+    // Liquids do not use a separate movement mode. Instead we scale the normal
+    // controller's speed/acceleration/jump so water/lava feel heavier.
     const bool inLiquid = IsCharacterInLiquid(character, profile);
     const float liquidSpeedScale = inLiquid ? m_LiquidMoveSpeedScale : 1.0f;
     const float liquidAccelerationScale = inLiquid ? m_LiquidAccelerationScale : 1.0f;
@@ -158,6 +168,8 @@ void App::HandleCharacterInput(
         velocity.x = 0.0f;
     }
 
+    // After a head-bonk on a ceiling, preserve horizontal travel briefly so
+    // roof collision does not kill the whole jump arc's x-distance.
     if (ceilingCarryTimer > 0.0f && std::abs(ceilingCarrySpeed) > 0.01f) {
         const float timerRatio = std::clamp(
             ceilingCarryTimer / m_CeilingMomentumCarryDuration,
@@ -198,6 +210,8 @@ void App::HandleCharacterInput(
     }
     character->SetPosition(newPos);
 
+    // Jump injects vertical velocity plus a controlled horizontal launch band.
+    // That gives a meaningful jump even without a huge run-up.
     if (Util::Input::IsKeyPressed(jumpKey) && onGround) {
         velocity.y = m_JumpSpeed * (inLiquid ? m_LiquidJumpScale : 1.0f);
         if (inputDir != 0.0f) {
@@ -260,6 +274,8 @@ void App::UpdateCharacterPhysics(
     glm::vec2 newPos = oldPos;
     const float preVerticalVelocityX = velocity.x;
 
+    // Vertical motion is resolved separately from horizontal motion. This is
+    // why head collisions should stop y-motion but only indirectly shorten x.
     const bool inLiquid = IsCharacterInLiquid(character, profile);
     velocity.y -= m_Gravity * (inLiquid ? m_LiquidGravityScale : 1.0f);
     if (inLiquid) {
@@ -271,6 +287,8 @@ void App::UpdateCharacterPhysics(
     bool hitCeiling = false;
     ResolveVerticalCollisions(oldPos, newPos, profile, velocity, onGround, hitCeiling);
 
+    // Remember horizontal momentum after a ceiling hit so the next few frames
+    // keep the jump feeling "floaty" instead of reflecting/killing x carry.
     if (hitCeiling && std::abs(preVerticalVelocityX) > 0.01f) {
         const float minCarrySpeed = m_JumpHorizontalLaunchMin * (inLiquid ? m_LiquidMoveSpeedScale : 1.0f);
         ceilingCarryTimer = m_CeilingMomentumCarryDuration;
@@ -293,6 +311,9 @@ void App::UpdateCharacterMotionState(
     const glm::vec2& velocity,
     bool onGround
 ) {
+    // Animation state is driven from movement outcome, not raw input. This
+    // keeps jump/fall/run visuals consistent even when slopes or collisions
+    // modify the actual motion.
     if (!character || !character->IsAlive()) {
         return;
     }
@@ -338,6 +359,8 @@ void App::UpdateCharacterMotionState(
 }
 
 void App::UpdateExitDoors() {
+    // Doors open independently for their matching characters, but the level
+    // only transitions into victory once both doors are occupied together.
     auto updateDoorSprite = [&](ExitDoor& door) {
         if (!door.sprite) {
             return;
@@ -386,6 +409,9 @@ void App::UpdateExitDoors() {
 }
 
 void App::UpdateVictorySequence() {
+    // Victory has two phases:
+    // - a short auto-run into the doors
+    // - then a stationary win animation
     auto zeroAirVisuals = [](const std::shared_ptr<HeadBodyCharacter>& character) {
         if (!character) {
             return;
@@ -538,6 +564,8 @@ void App::UpdateFailOverlayVisuals() {
 }
 
 void App::UpdateFailOverlay() {
+    // Fail overlay is the current "game over" state for Level 1. Restart and
+    // Exit are real; Home is still routed to Start() until a menu state exists.
     m_FailOverlayVisible = AreBothCharactersDead();
     UpdateFailOverlayVisuals();
 
@@ -570,6 +598,8 @@ void App::UpdateFailOverlay() {
 }
 
 void App::CheckHazards() {
+    // Hazard rules currently match the classic element logic:
+    // Fireboy dies in water, Watergirl dies in lava.
     auto isFatal = [](HazardRect::Type type, bool isFireboy) {
         switch (type) {
         case HazardRect::Type::Lava:
@@ -609,6 +639,8 @@ void App::CheckHazards() {
 }
 
 void App::UpdateDeathSequence() {
+    // Death is a short sink/shrink transition before the character becomes
+    // fully non-interactive and invisible.
     auto updateCharacterDeath = [&](const std::shared_ptr<HeadBodyCharacter>& character,
                                     float& deathTimer,
                                     const glm::vec2& deathStartScale,
@@ -645,6 +677,7 @@ void App::UpdateDeathSequence() {
 }
 
 void App::UpdateGreenSwitch() {
+    // Switches are toggle-based and independent from the hold-to-press buttons.
     if (!m_GreenSwitch) {
         return;
     }
@@ -664,6 +697,8 @@ void App::UpdateGreenSwitch() {
 }
 
 void App::CheckDiamondCollection() {
+    // Diamonds are optional collectibles right now, but they already track
+    // per-color totals so later win conditions / UI can use the same data.
     if (m_Diamonds.empty()) {
         return;
     }
@@ -730,12 +765,19 @@ void App::CheckDiamondCollection() {
 }
 
 void App::UpdateCubePhysics() {
+    // The cube is treated as a pushable solid block that:
+    // - accelerates from character push intent
+    // - collides with terrain
+    // - can ride moving platforms
+    // - now follows slopes without rotating
     if (!m_Cube || !m_HasCubeBlock || m_CubeBlockIndex >= m_SolidBlocks.size()) {
         return;
     }
 
     const SolidRect oldCube = m_CubeRect;
 
+    // Push intent counts both characters. If both push in the same direction,
+    // the target speed/acceleration naturally becomes stronger.
     auto getPushIntent = [&]() {
         float pushIntent = 0.0f;
 
@@ -831,40 +873,32 @@ void App::UpdateCubePhysics() {
         m_CubeVelocity.x = 0.0f;
     }
 
-    m_CubeRect.center.x += m_CubeVelocity.x;
-    for (std::size_t i = 0; i < m_SolidBlocks.size(); ++i) {
-        if (i == m_CubeBlockIndex) {
-            continue;
-        }
+    // Horizontal pass first, with slope-follow before and after collision
+    // resolution. This mirrors the character controller and avoids stair-step
+    // movement on ramps.
+    SolidRect cubeAfterHorizontal = m_CubeRect;
+    cubeAfterHorizontal.center.x += m_CubeVelocity.x;
 
-        const auto& block = m_SolidBlocks[i];
-        if (!CheckAABB(m_CubeRect.center, m_CubeRect.size, block.center, block.size)) {
-            continue;
-        }
-
-        const float oldLeft = oldCube.center.x - oldCube.size.x * 0.5f;
-        const float oldRight = oldCube.center.x + oldCube.size.x * 0.5f;
-        const float newLeft = m_CubeRect.center.x - m_CubeRect.size.x * 0.5f;
-        const float newRight = m_CubeRect.center.x + m_CubeRect.size.x * 0.5f;
-        const float blockLeft = block.center.x - block.size.x * 0.5f;
-        const float blockRight = block.center.x + block.size.x * 0.5f;
-
-        if (m_CubeVelocity.x > 0.0f && oldRight <= blockLeft && newRight >= blockLeft) {
-            m_CubeRect.center.x = blockLeft - m_CubeRect.size.x * 0.5f;
-            m_CubeVelocity.x = 0.0f;
-        } else if (m_CubeVelocity.x < 0.0f && oldLeft >= blockRight && newLeft <= blockRight) {
-            m_CubeRect.center.x = blockRight + m_CubeRect.size.x * 0.5f;
-            m_CubeVelocity.x = 0.0f;
-        }
+    if (cubeAfterHorizontal.center.x != oldCube.center.x && m_CubeVelocity.y <= 0.0f) {
+        ApplyCubeSlopeFollow(oldCube, cubeAfterHorizontal);
     }
 
-    const SolidRect cubeAfterHorizontal = m_CubeRect;
+    ResolveCubeHorizontalCollisions(oldCube, cubeAfterHorizontal, m_CubeVelocity);
+
+    if (cubeAfterHorizontal.center.x != oldCube.center.x && m_CubeVelocity.y <= 0.0f) {
+        ApplyCubeSlopeFollow(oldCube, cubeAfterHorizontal);
+    }
+
+    // Vertical pass next: regular block collision + explicit slope grounding.
+    m_CubeRect = cubeAfterHorizontal;
+    const SolidRect cubeBeforeVertical = m_CubeRect;
     m_CubeVelocity.y -= m_Gravity;
     m_CubeRect.center.y += m_CubeVelocity.y;
     m_CubeOnGround = false;
 
     bool foundGround = false;
     float bestGroundY = -std::numeric_limits<float>::infinity();
+    bool hitCeiling = false;
     for (std::size_t i = 0; i < m_SolidBlocks.size(); ++i) {
         if (i == m_CubeBlockIndex) {
             continue;
@@ -875,8 +909,8 @@ void App::UpdateCubePhysics() {
             continue;
         }
 
-        const float oldBottom = cubeAfterHorizontal.center.y - cubeAfterHorizontal.size.y * 0.5f;
-        const float oldTop = cubeAfterHorizontal.center.y + cubeAfterHorizontal.size.y * 0.5f;
+        const float oldBottom = cubeBeforeVertical.center.y - cubeBeforeVertical.size.y * 0.5f;
+        const float oldTop = cubeBeforeVertical.center.y + cubeBeforeVertical.size.y * 0.5f;
         const float newBottom = m_CubeRect.center.y - m_CubeRect.size.y * 0.5f;
         const float newTop = m_CubeRect.center.y + m_CubeRect.size.y * 0.5f;
         const float blockTop = block.center.y + block.size.y * 0.5f;
@@ -887,11 +921,34 @@ void App::UpdateCubePhysics() {
             newBottom <= blockTop + m_GroundSnapTolerance) {
             bestGroundY = std::max(bestGroundY, blockTop);
             foundGround = true;
-        } else if (m_CubeVelocity.y > 0.0f &&
+        } else if (block.blockBottom &&
+                   m_CubeVelocity.y > 0.0f &&
                    oldTop <= blockBottom + m_GroundSnapTolerance &&
                    newTop >= blockBottom - m_GroundSnapTolerance) {
             m_CubeRect.center.y = blockBottom - m_CubeRect.size.y * 0.5f;
             m_CubeVelocity.y = 0.0f;
+            hitCeiling = true;
+        }
+    }
+
+    if (!hitCeiling && ResolveCubeSlopeGrounding(
+            cubeBeforeVertical,
+            m_CubeRect,
+            m_CubeVelocity,
+            m_CubeOnGround
+        )) {
+        const float slopeGroundY = m_CubeRect.center.y - m_CubeRect.size.y * 0.5f;
+        if (!foundGround || slopeGroundY > bestGroundY) {
+            bestGroundY = slopeGroundY;
+            foundGround = true;
+        }
+    }
+
+    if (!foundGround && m_CubeVelocity.y <= 0.0f) {
+        float stickyGroundY = 0.0f;
+        if (FindNearbyCubeGroundY(m_CubeRect, m_GroundStickTolerance, stickyGroundY)) {
+            bestGroundY = stickyGroundY;
+            foundGround = true;
         }
     }
 
@@ -911,7 +968,323 @@ void App::UpdateCubePhysics() {
     }
 }
 
+void App::ResolveCubeHorizontalCollisions(
+    const SolidRect& oldCube,
+    SolidRect& newCube,
+    glm::vec2& velocity
+) const {
+    // Cube horizontal collision allows a small step-up / nearby-ground snap so
+    // slope and flat transitions do not behave like tiny vertical walls.
+    const float oldBottom = oldCube.center.y - oldCube.size.y * 0.5f;
+
+    auto cubeCollides = [&](const SolidRect& candidate, const SolidRect& block) {
+        return CheckAABB(candidate.center, candidate.size, block.center, block.size);
+    };
+
+    for (std::size_t i = 0; i < m_SolidBlocks.size(); ++i) {
+        if (i == m_CubeBlockIndex) {
+            continue;
+        }
+
+        const auto& block = m_SolidBlocks[i];
+        if (!cubeCollides(newCube, block)) {
+            continue;
+        }
+
+        const float oldLeft = oldCube.center.x - oldCube.size.x * 0.5f;
+        const float oldRight = oldCube.center.x + oldCube.size.x * 0.5f;
+        const float newLeft = newCube.center.x - newCube.size.x * 0.5f;
+        const float newRight = newCube.center.x + newCube.size.x * 0.5f;
+        const float blockLeft = block.center.x - block.size.x * 0.5f;
+        const float blockRight = block.center.x + block.size.x * 0.5f;
+        const float blockTop = block.center.y + block.size.y * 0.5f;
+
+        auto canStepUp = [&](float targetTopY) {
+            const float raisedY = targetTopY + newCube.size.y * 0.5f + 0.1f;
+            const float liftAmount = raisedY - oldCube.center.y;
+            if (liftAmount <= 0.0f || liftAmount > m_StepUpHeight) {
+                return false;
+            }
+
+            SolidRect candidate = newCube;
+            candidate.center.y = raisedY;
+            const float candidateBottom = candidate.center.y - candidate.size.y * 0.5f;
+
+            for (std::size_t j = 0; j < m_SolidBlocks.size(); ++j) {
+                if (j == m_CubeBlockIndex || j == i) {
+                    continue;
+                }
+
+                const auto& other = m_SolidBlocks[j];
+                if (!cubeCollides(candidate, other)) {
+                    continue;
+                }
+
+                const float otherTop = other.center.y + other.size.y * 0.5f;
+                const bool isSupportContact =
+                    candidateBottom >= otherTop - m_GroundSnapTolerance &&
+                    candidateBottom <= otherTop + m_SlopeSnapTolerance;
+
+                if (!isSupportContact) {
+                    return false;
+                }
+            }
+
+            newCube.center.y = raisedY;
+            return true;
+        };
+
+        auto canStepToNearbyGround = [&]() {
+            SolidRect probeCube = newCube;
+            probeCube.center.y = oldCube.center.y;
+
+            float targetGroundY = 0.0f;
+            if (!FindNearbyCubeGroundY(
+                    probeCube,
+                    m_StepUpHeight + m_GroundSnapTolerance,
+                    targetGroundY
+                )) {
+                return false;
+            }
+
+            const float liftAmount = targetGroundY - oldBottom;
+            if (liftAmount < -m_GroundSnapTolerance ||
+                liftAmount > m_StepUpHeight + m_GroundSnapTolerance) {
+                return false;
+            }
+
+            SolidRect candidate = newCube;
+            candidate.center.y = targetGroundY + candidate.size.y * 0.5f + 0.1f;
+            const float candidateBottom = candidate.center.y - candidate.size.y * 0.5f;
+
+            for (std::size_t j = 0; j < m_SolidBlocks.size(); ++j) {
+                if (j == m_CubeBlockIndex) {
+                    continue;
+                }
+
+                const auto& other = m_SolidBlocks[j];
+                if (!cubeCollides(candidate, other)) {
+                    continue;
+                }
+
+                const float otherTop = other.center.y + other.size.y * 0.5f;
+                const bool isSupportContact =
+                    candidateBottom >= otherTop - m_GroundSnapTolerance &&
+                    candidateBottom <= otherTop + m_SlopeSnapTolerance;
+
+                if (!isSupportContact) {
+                    return false;
+                }
+            }
+
+            newCube.center.y = candidate.center.y;
+            return true;
+        };
+
+        if (velocity.x > 0.0f && oldRight <= blockLeft && newRight >= blockLeft) {
+            if (!canStepUp(blockTop) && !canStepToNearbyGround()) {
+                newCube.center.x = blockLeft - newCube.size.x * 0.5f;
+                velocity.x = 0.0f;
+            }
+        } else if (velocity.x < 0.0f && oldLeft >= blockRight && newLeft <= blockRight) {
+            if (!canStepUp(blockTop) && !canStepToNearbyGround()) {
+                newCube.center.x = blockRight + newCube.size.x * 0.5f;
+                velocity.x = 0.0f;
+            }
+        }
+    }
+}
+
+bool App::ResolveCubeSlopeGrounding(
+    const SolidRect& oldCube,
+    SolidRect& newCube,
+    glm::vec2& velocity,
+    bool& onGround
+) const {
+    // The cube samples left/center/right bottom points against floor slopes.
+    // This gives smooth ramp travel without needing to rotate the sprite.
+    if (velocity.y > 1.0f) {
+        return false;
+    }
+
+    const float oldBottom = oldCube.center.y - oldCube.size.y * 0.5f;
+    const float newBottom = newCube.center.y - newCube.size.y * 0.5f;
+    const float footInset = std::min(m_FootProbeInset, newCube.size.x * 0.25f);
+    const float leftFootX = newCube.center.x - newCube.size.x * 0.5f + footInset;
+    const float rightFootX = newCube.center.x + newCube.size.x * 0.5f - footInset;
+
+    bool foundSlope = false;
+    float bestGroundY = -std::numeric_limits<float>::infinity();
+
+    for (const auto& slope : m_Slopes) {
+        const glm::vec2 delta = slope.end - slope.start;
+        if (std::abs(delta.x) < 0.001f) {
+            continue;
+        }
+
+        for (const float footX : {leftFootX, newCube.center.x, rightFootX}) {
+            const float minX = std::min(slope.start.x, slope.end.x) - m_SlopeSnapTolerance;
+            const float maxX = std::max(slope.start.x, slope.end.x) + m_SlopeSnapTolerance;
+            if (footX < minX || footX > maxX) {
+                continue;
+            }
+
+            const float t = (footX - slope.start.x) / delta.x;
+            if (t < -0.15f || t > 1.15f) {
+                continue;
+            }
+
+            const float slopeY = slope.start.y + delta.y * t;
+            const bool crossesSlope =
+                oldBottom >= slopeY - m_SlopeSnapTolerance &&
+                newBottom <= slopeY + m_SlopeSnapTolerance;
+
+            if (!crossesSlope) {
+                continue;
+            }
+
+            if (!foundSlope || slopeY > bestGroundY) {
+                bestGroundY = slopeY;
+                foundSlope = true;
+            }
+        }
+    }
+
+    if (!foundSlope) {
+        return false;
+    }
+
+    newCube.center.y = bestGroundY + newCube.size.y * 0.5f;
+    velocity.y = 0.0f;
+    onGround = true;
+    return true;
+}
+
+bool App::FindBestCubeSlopeYAtX(
+    const SolidRect& oldCube,
+    float desiredCenterX,
+    float& outSlopeY
+) const {
+    // Used by cube slope follow: ask "if the cube were centered at this x,
+    // what slope height should support its bottom?"
+    const float oldBottom = oldCube.center.y - oldCube.size.y * 0.5f;
+    const float footInset = std::min(m_FootProbeInset, oldCube.size.x * 0.25f);
+    const float leftFootX = desiredCenterX - oldCube.size.x * 0.5f + footInset;
+    const float rightFootX = desiredCenterX + oldCube.size.x * 0.5f - footInset;
+
+    bool foundSlope = false;
+    float bestSlopeY = -std::numeric_limits<float>::infinity();
+
+    for (const auto& slope : m_Slopes) {
+        const glm::vec2 delta = slope.end - slope.start;
+        if (std::abs(delta.x) < 0.001f) {
+            continue;
+        }
+
+        for (const float footX : {leftFootX, desiredCenterX, rightFootX}) {
+            const float minX = std::min(slope.start.x, slope.end.x) - m_SlopeTopTransitionWidth;
+            const float maxX = std::max(slope.start.x, slope.end.x) + m_SlopeTopTransitionWidth;
+            if (footX < minX || footX > maxX) {
+                continue;
+            }
+
+            const float t = (footX - slope.start.x) / delta.x;
+            if (t < -0.15f || t > 1.15f) {
+                continue;
+            }
+
+            const float slopeY = slope.start.y + delta.y * t;
+            const float deltaFromFeet = slopeY - oldBottom;
+            if (deltaFromFeet < -m_SlopeFollowTolerance ||
+                deltaFromFeet > m_SlopeTopTransitionHeight) {
+                continue;
+            }
+
+            if (!foundSlope || slopeY > bestSlopeY) {
+                bestSlopeY = slopeY;
+                foundSlope = true;
+            }
+        }
+    }
+
+    if (!foundSlope) {
+        return false;
+    }
+
+    outSlopeY = bestSlopeY;
+    return true;
+}
+
+void App::ApplyCubeSlopeFollow(
+    const SolidRect& oldCube,
+    SolidRect& newCube
+) const {
+    // Horizontal slope follow is what makes pushing the cube across a ramp look
+    // continuous instead of colliding on every little rectangle seam.
+    float bestSlopeY = 0.0f;
+    if (!FindBestCubeSlopeYAtX(oldCube, newCube.center.x, bestSlopeY)) {
+        return;
+    }
+
+    newCube.center.y = bestSlopeY + newCube.size.y * 0.5f;
+}
+
+bool App::FindNearbyCubeGroundY(
+    const SolidRect& cube,
+    float maxDistance,
+    float& outGroundY
+) const {
+    // This helper blends flat-top terrain and slope tops into one "best nearby
+    // support surface" query, which is key for stable step-up behavior.
+    const float left = cube.center.x - cube.size.x * 0.5f;
+    const float right = cube.center.x + cube.size.x * 0.5f;
+    const float bottom = cube.center.y - cube.size.y * 0.5f;
+
+    bool foundGround = false;
+    float bestGroundY = -std::numeric_limits<float>::infinity();
+
+    for (std::size_t i = 0; i < m_SolidBlocks.size(); ++i) {
+        if (i == m_CubeBlockIndex) {
+            continue;
+        }
+
+        const auto& block = m_SolidBlocks[i];
+        const float blockLeft = block.center.x - block.size.x * 0.5f;
+        const float blockRight = block.center.x + block.size.x * 0.5f;
+        if (right <= blockLeft - m_FootProbeInset || left >= blockRight + m_FootProbeInset) {
+            continue;
+        }
+
+        const float blockTop = block.center.y + block.size.y * 0.5f;
+        if (std::abs(blockTop - bottom) > maxDistance) {
+            continue;
+        }
+
+        if (!foundGround || blockTop > bestGroundY) {
+            bestGroundY = blockTop;
+            foundGround = true;
+        }
+    }
+
+    float slopeGroundY = 0.0f;
+    if (FindBestCubeSlopeYAtX(cube, cube.center.x, slopeGroundY) &&
+        std::abs(slopeGroundY - bottom) <= maxDistance &&
+        (!foundGround || slopeGroundY > bestGroundY)) {
+        bestGroundY = slopeGroundY;
+        foundGround = true;
+    }
+
+    if (!foundGround) {
+        return false;
+    }
+
+    outGroundY = bestGroundY;
+    return true;
+}
+
 void App::UpdateGreenPlatform() {
+    // The green platform is physically moved by updating its SolidRect inside
+    // m_SolidBlocks, then carrying any character/cube standing on it.
     if (!m_GreenPlatform || !m_HasGreenPlatformBlock || m_GreenPlatformBlockIndex >= m_SolidBlocks.size()) {
         return;
     }
@@ -1166,6 +1539,9 @@ void App::ResolveHorizontalCollisions(
     glm::vec2& newPos,
     const CharacterCollisionProfile& profile
 ) {
+    // Characters use "terrain-aware horizontal collision": before deciding a
+    // rectangle side is a wall, try to interpret it as a valid step/slope
+    // transition. This is what makes the level's hand-authored ramps playable.
     glm::vec2 oldBodyCenter = {0.0f, 0.0f};
     glm::vec2 oldBodySize = {0.0f, 0.0f};
     GetCharacterBodyBox(oldPos, profile, oldBodyCenter, oldBodySize);
@@ -1312,6 +1688,11 @@ void App::ResolveVerticalCollisions(
     bool& onGround,
     bool& hitCeiling
 ) {
+    // Vertical resolution is responsible for:
+    // - floor landing on solid blocks
+    // - ceiling bonks on blocks/slopes
+    // - snapping onto floor slopes
+    // - sticky ground/ceiling assistance for hand-authored map seams
     onGround = false;
     hitCeiling = false;
 
@@ -1611,6 +1992,8 @@ bool App::ResolveSlopeGrounding(
     glm::vec2& velocity,
     bool& onGround
 ) {
+    // Floor slopes are treated as walkable top lines. If the body bottom crosses
+    // one during descent, we snap to the highest valid supporting slope point.
     if (velocity.y > 1.0f) {
         return false;
     }
@@ -1681,6 +2064,8 @@ bool App::ResolveCeilingSlopeCollision(
     const CharacterCollisionProfile& profile,
     glm::vec2& velocity
 ) {
+    // Ceiling slopes and the underside of floor slopes both act as solid
+    // boundaries when jumping upward, which prevents ghosting through pits.
     if (velocity.y <= 0.0f) {
         return false;
     }
@@ -1759,6 +2144,8 @@ bool App::TrySnapToSlopeTopTransition(
     const SolidRect& blockingBlock,
     const CharacterCollisionProfile& profile
 ) const {
+    // This is the special handoff that makes uphill slope-to-flat transitions
+    // feel smooth instead of getting caught on a tiny wall at the top.
     if (newPos.x == oldPos.x) {
         return false;
     }
@@ -1824,6 +2211,8 @@ bool App::FindBestSlopeYAtX(
     float& outSlopeY,
     const CharacterCollisionProfile& profile
 ) const {
+    // Shared query used by slope follow and ground search for characters.
+    // It returns the best walkable slope height for a desired x position.
     glm::vec2 oldBodyCenter = {0.0f, 0.0f};
     glm::vec2 oldBodySize = {0.0f, 0.0f};
     GetCharacterBodyBox(oldPos, profile, oldBodyCenter, oldBodySize);
@@ -1883,6 +2272,8 @@ void App::ApplySlopeFollow(
     glm::vec2& newPos,
     const CharacterCollisionProfile& profile
 ) const {
+    // Pure horizontal movement across a slope still needs a y adjustment each
+    // frame, otherwise ramps feel like staircase collisions.
     float bestSlopeY = 0.0f;
     if (!FindBestSlopeYAtX(oldPos, newPos.x, bestSlopeY, profile)) {
         return;
@@ -1897,6 +2288,8 @@ bool App::FindNearbyGroundY(
     float& outGroundY,
     const CharacterCollisionProfile& profile
 ) const {
+    // Nearby-ground search merges flat blocks and slope tops into one support
+    // concept. This is one of the main anti-gap / anti-sticking helpers.
     glm::vec2 bodyCenter = {0.0f, 0.0f};
     glm::vec2 bodySize = {0.0f, 0.0f};
     GetCharacterBodyBox(pos, profile, bodyCenter, bodySize);
@@ -1948,6 +2341,8 @@ bool App::FindNearbyCeilingY(
     float& outCeilingY,
     const CharacterCollisionProfile& profile
 ) const {
+    // Mirror of FindNearbyGroundY for ceilings. It helps avoid tiny seam bugs
+    // when the head is almost aligned with a block bottom or ceiling slope.
     glm::vec2 headCenter = {0.0f, 0.0f};
     glm::vec2 headSize = {0.0f, 0.0f};
     GetCharacterHeadBox(pos, profile, headCenter, headSize);

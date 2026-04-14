@@ -12,6 +12,7 @@ static std::unordered_map<HeadBodyCharacter*, glm::vec2> s_LastPos;
 
 void App::Start() {
     LOG_TRACE("Start");
+    m_Root = Util::Renderer();
 
     // -------------------------------------------------------------------------
     // 1) 基本場景參數
@@ -37,6 +38,7 @@ void App::Start() {
     m_Hazards.clear();
     m_LevelProps.clear();
     m_AnimatedLevelProps.clear();
+    m_FailOverlayObjects.clear();
     m_Diamonds.clear();
     m_GreenSwitch.reset();
     m_Cube.reset();
@@ -57,10 +59,21 @@ void App::Start() {
     m_CubeOnGround = false;
     m_FireboyDeathTimer = 0.0f;
     m_WatergirlDeathTimer = 0.0f;
+    m_FireboyCeilingCarryTimer = 0.0f;
+    m_WatergirlCeilingCarryTimer = 0.0f;
+    m_FireboyCeilingCarrySpeed = 0.0f;
+    m_WatergirlCeilingCarrySpeed = 0.0f;
     m_FireboyDoor = {};
     m_WatergirlDoor = {};
     m_VictoryPhase = VictoryPhase::None;
     m_VictoryTimer = 0.0f;
+    m_FailOverlayVisible = false;
+    m_FailOverlayMouseLatch = false;
+    m_FailOverlayPanel.reset();
+    m_FailOverlayTitle.reset();
+    m_FailRestartButton = {};
+    m_FailHomeButton = {};
+    m_FailExitButton = {};
 
     m_SolidBlocks.push_back(ImageRectToWorldRect(0.0f, 0.0f, 2380.0f, 45.0f));       // Roof
     // Left floor segment before the two lower depressions. Keep this as index 1
@@ -210,14 +223,14 @@ void App::Start() {
     m_GreenPlatform->SetPosition(m_GreenPlatformCurrentRect.center);
     m_Root.AddChild(m_GreenPlatform);
 
-    m_GreenButtonHitbox = ImageRectToWorldRect(805.0f, 1160.0f, 970.0f, 1220.0f);
+    m_GreenButtonHitbox = ImageRectToWorldRect(1180.0f, 1280.0f, 1345.0f, 1340.0f);
     const glm::vec2 greenButtonSize = {
         m_GreenButtonHitbox.size.x / 2.0f,
         (m_GreenButtonHitbox.size.x / 2.0f) * (120.0f / 189.0f),
     };
     m_GreenButtonHitbox.size = greenButtonSize;
     m_GreenButtonHitbox.center.y =
-        ImagePointToWorldPoint(0.0f, 1223.0f).y + greenButtonSize.y * 0.5f;
+        ImagePointToWorldPoint(0.0f, 1340.0f).y + greenButtonSize.y * 0.5f;
     m_SolidBlocks.push_back(m_GreenButtonHitbox);
     m_GreenButton = std::make_shared<Character>(
         GA_RESOURCE_DIR "/Image/Assets/button_green.png"
@@ -951,6 +964,80 @@ void App::Start() {
         m_WatergirlCollision.headHitboxSize.x,
         m_WatergirlCollision.headHitboxSize.y
     );
+
+    // -------------------------------------------------------------------------
+    // 7) Fail overlay
+    // -------------------------------------------------------------------------
+    m_FailOverlayPanel = std::make_shared<Character>(
+        GA_RESOURCE_DIR "/Image/Assets/ui_fail_overlay_panel.png"
+    );
+    m_FailOverlayPanel->SetZIndex(50.0f);
+    m_FailOverlayPanel->SetSize({760.0f, 430.0f});
+    m_FailOverlayPanel->SetPosition({0.0f, 20.0f});
+    m_FailOverlayPanel->SetVisible(false);
+    m_Root.AddChild(m_FailOverlayPanel);
+    m_FailOverlayObjects.push_back(m_FailOverlayPanel);
+
+    auto makeOverlayText = [&](const std::string& text,
+                               const glm::vec2& position,
+                               int fontSize,
+                               const Util::Color& color,
+                               float zIndex) {
+        auto object = std::make_shared<OverlayText>(text, fontSize, color, zIndex);
+        object->m_Transform.translation = position;
+        object->SetVisible(false);
+        m_Root.AddChild(object);
+        m_FailOverlayObjects.push_back(object);
+        return object;
+    };
+
+    m_FailOverlayTitle = makeOverlayText(
+        "Both heroes fell",
+        {0.0f, 120.0f},
+        34,
+        Util::Color(255, 245, 220, 255),
+        51.0f
+    );
+
+    auto makeFailButton = [&](const std::string& label,
+                              const std::string& futureAssetPath,
+                              const glm::vec2& center,
+                              const glm::vec2& size) {
+        FailOverlayButton button;
+        button.label = label;
+        button.futureAssetPath = futureAssetPath;
+        button.rect.center = center;
+        button.rect.size = size;
+        button.labelObject = makeOverlayText(
+            label,
+            center,
+            26,
+            Util::Color(255, 255, 255, 255),
+            51.0f
+        );
+        return button;
+    };
+
+    m_FailRestartButton = makeFailButton(
+        "RESTART",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/button_restart.png",
+        {0.0f, 25.0f},
+        {240.0f, 64.0f}
+    );
+    m_FailHomeButton = makeFailButton(
+        "HOME",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/button_home.png",
+        {0.0f, -55.0f},
+        {240.0f, 64.0f}
+    );
+    m_FailExitButton = makeFailButton(
+        "EXIT",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/button_exit.png",
+        {0.0f, -135.0f},
+        {240.0f, 64.0f}
+    );
+
+    UpdateFailOverlayVisuals();
 
     m_CurrentState = State::UPDATE;
 }

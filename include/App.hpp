@@ -9,8 +9,40 @@
 #include "Character.hpp"
 #include "HeadBodyCharacter.hpp"
 #include "LevelGeometry.hpp"
+#include "Util/Color.hpp"
+#include "Util/GameObject.hpp"
 #include "Util/Keycode.hpp"
 #include "Util/Renderer.hpp"
+#include "Util/Text.hpp"
+
+class OverlayText : public Util::GameObject {
+public:
+    OverlayText(const std::string& text,
+                int fontSize,
+                const Util::Color& color,
+                float zIndex)
+        : GameObject(
+            std::make_shared<Util::Text>(
+                GA_RESOURCE_DIR "/Font/Inkfree.ttf",
+                fontSize,
+                text,
+                color
+            ),
+            zIndex
+        ) {}
+
+    void SetText(const std::string& text) {
+        if (auto drawable = std::dynamic_pointer_cast<Util::Text>(m_Drawable)) {
+            drawable->SetText(text);
+        }
+    }
+
+    void SetColor(const Util::Color& color) {
+        if (auto drawable = std::dynamic_pointer_cast<Util::Text>(m_Drawable)) {
+            drawable->SetColor(color);
+        }
+    }
+};
 
 class App {
 public:
@@ -67,6 +99,20 @@ private:
         Celebrate,
     };
 
+    enum class FailOverlayAction {
+        None,
+        Restart,
+        Home,
+        Exit,
+    };
+
+    struct FailOverlayButton {
+        std::string label;
+        std::string futureAssetPath;
+        SolidRect rect;
+        std::shared_ptr<OverlayText> labelObject;
+    };
+
     // ------------------------------------------------------------------------
     // Core gameplay steps
     // ------------------------------------------------------------------------
@@ -77,13 +123,17 @@ private:
         const CharacterCollisionProfile& profile,
         Util::Keycode leftKey,
         Util::Keycode rightKey,
-        Util::Keycode jumpKey
+        Util::Keycode jumpKey,
+        float& ceilingCarryTimer,
+        float& ceilingCarrySpeed
     );
     void UpdateCharacterPhysics(
         const std::shared_ptr<HeadBodyCharacter>& character,
         glm::vec2& velocity,
         bool& onGround,
-        const CharacterCollisionProfile& profile
+        const CharacterCollisionProfile& profile,
+        float& ceilingCarryTimer,
+        float& ceilingCarrySpeed
     );
     void UpdateCharacterMotionState(
         const std::shared_ptr<HeadBodyCharacter>& character,
@@ -97,6 +147,12 @@ private:
     void UpdateDeathSequence();
     void UpdateExitDoors();
     void UpdateVictorySequence();
+    void UpdateFailOverlay();
+    void UpdateFailOverlayVisuals();
+    void ResetFailOverlayLatch();
+    [[nodiscard]] bool AreBothCharactersDead() const;
+    [[nodiscard]] bool IsFailOverlayVisible() const;
+    [[nodiscard]] FailOverlayAction GetFailOverlayAction() const;
     bool IsGreenButtonPressed() const;
     bool IsGreenSwitchTouched() const;
     bool CubeTouchesRect(const SolidRect& rect) const;
@@ -165,7 +221,8 @@ private:
         glm::vec2& newPos,
         const CharacterCollisionProfile& profile,
         glm::vec2& velocity,
-        bool& onGround
+        bool& onGround,
+        bool& hitCeiling
     );
     bool ResolveSlopeGrounding(
         const glm::vec2& oldPos,
@@ -273,6 +330,7 @@ private:
     ExitDoor m_WatergirlDoor;
     std::vector<std::shared_ptr<Character>> m_LevelProps;
     std::vector<std::shared_ptr<Util::GameObject>> m_AnimatedLevelProps;
+    std::vector<std::shared_ptr<Util::GameObject>> m_FailOverlayObjects;
     std::vector<CollectibleDiamond> m_Diamonds;
 
     // ------------------------------------------------------------------------
@@ -290,12 +348,14 @@ private:
     bool m_WatergirlOnGround = false;
     bool m_CubeOnGround = false;
 
-    float m_MoveSpeed = 2.35f;
+    float m_MoveSpeed = 3.55f;
     float m_GroundAcceleration = 0.10f;
-    float m_AirAcceleration = 0.095f;
+    float m_AirAcceleration = 0.20f;
     float m_GroundDeceleration = 0.07f;
-    float m_AirDeceleration = 0.004f;
+    float m_AirDeceleration = 0.001f;
     float m_JumpSpeed = 4.5f;
+    float m_JumpHorizontalLaunchMin = 4.10f;
+    float m_JumpHorizontalLaunchMax = 7.40f;
     float m_Gravity = 0.11f;
     float m_LiquidMoveSpeedScale = 0.72f;
     float m_LiquidAccelerationScale = 0.70f;
@@ -306,6 +366,9 @@ private:
     float m_DeathAnimationDuration = 0.28f;
     float m_DeathSinkSpeed = 0.95f;
     float m_DeathEndScale = 0.52f;
+    float m_CeilingMomentumCarryDuration = 0.18f;
+    float m_CeilingMomentumCarryBoost = 1.18f;
+    float m_CeilingMomentumCarryFloor = 0.82f;
     float m_GroundSnapTolerance = 4.0f;
     float m_GroundStickTolerance = 14.0f;
     float m_CeilingStickTolerance = 10.0f;
@@ -358,6 +421,10 @@ private:
     bool m_GreenSwitchTouchLatch = false;
     float m_FireboyDeathTimer = 0.0f;
     float m_WatergirlDeathTimer = 0.0f;
+    float m_FireboyCeilingCarryTimer = 0.0f;
+    float m_WatergirlCeilingCarryTimer = 0.0f;
+    float m_FireboyCeilingCarrySpeed = 0.0f;
+    float m_WatergirlCeilingCarrySpeed = 0.0f;
     float m_GreenPlatformSpeed = 2.2f;
     float m_CubePushSpeed = 1.15f;
     float m_CubePushAcceleration = 0.10f;
@@ -366,6 +433,13 @@ private:
     float m_VictoryTimer = 0.0f;
     float m_VictoryRunDuration = 0.30f;
     float m_DoorFrameDuration = 0.06f;
+    bool m_FailOverlayVisible = false;
+    bool m_FailOverlayMouseLatch = false;
+    std::shared_ptr<Character> m_FailOverlayPanel;
+    std::shared_ptr<OverlayText> m_FailOverlayTitle;
+    FailOverlayButton m_FailRestartButton;
+    FailOverlayButton m_FailHomeButton;
+    FailOverlayButton m_FailExitButton;
 };
 
 #endif // APP_HPP

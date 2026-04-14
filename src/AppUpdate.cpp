@@ -18,6 +18,17 @@ constexpr float FIXED_TIME_STEP = 1.0f / 60.0f;
 }
 
 void App::Update() {
+    if (IsFailOverlayVisible()) {
+        UpdateFailOverlay();
+
+        if (Util::Input::IsKeyPressed(Util::Keycode::ESCAPE) || Util::Input::IfExit()) {
+            m_CurrentState = State::END;
+        }
+
+        m_Root.Update();
+        return;
+    }
+
     if (m_VictoryPhase == VictoryPhase::None) {
         UpdateCubePhysics();
 
@@ -31,6 +42,13 @@ void App::Update() {
         UpdateGreenPlatform();
         CheckHazards();
         UpdateDeathSequence();
+
+        if (AreBothCharactersDead()) {
+            UpdateFailOverlay();
+            m_Root.Update();
+            return;
+        }
+
         CheckDiamondCollection();
         UpdateExitDoors();
 
@@ -60,7 +78,9 @@ void App::HandleFireboyInput() {
         m_FireboyCollision,
         Util::Keycode::A,
         Util::Keycode::D,
-        Util::Keycode::W
+        Util::Keycode::W,
+        m_FireboyCeilingCarryTimer,
+        m_FireboyCeilingCarrySpeed
     );
 }
 
@@ -72,7 +92,9 @@ void App::HandleWatergirlInput() {
         m_WatergirlCollision,
         Util::Keycode::LEFT,
         Util::Keycode::RIGHT,
-        Util::Keycode::UP
+        Util::Keycode::UP,
+        m_WatergirlCeilingCarryTimer,
+        m_WatergirlCeilingCarrySpeed
     );
 }
 
@@ -83,7 +105,9 @@ void App::HandleCharacterInput(
     const CharacterCollisionProfile& profile,
     Util::Keycode leftKey,
     Util::Keycode rightKey,
-    Util::Keycode jumpKey
+    Util::Keycode jumpKey,
+    float& ceilingCarryTimer,
+    float& ceilingCarrySpeed
 ) {
     if (!character || !character->IsAlive()) {
         return;
@@ -134,6 +158,28 @@ void App::HandleCharacterInput(
         velocity.x = 0.0f;
     }
 
+    if (ceilingCarryTimer > 0.0f && std::abs(ceilingCarrySpeed) > 0.01f) {
+        const float timerRatio = std::clamp(
+            ceilingCarryTimer / m_CeilingMomentumCarryDuration,
+            0.0f,
+            1.0f
+        );
+        const float minCarryAbs =
+            std::abs(ceilingCarrySpeed) *
+            (m_CeilingMomentumCarryFloor + (1.0f - m_CeilingMomentumCarryFloor) * timerRatio);
+
+        if (ceilingCarrySpeed > 0.0f) {
+            velocity.x = std::max(velocity.x, minCarryAbs);
+        } else {
+            velocity.x = std::min(velocity.x, -minCarryAbs);
+        }
+
+        ceilingCarryTimer = std::max(0.0f, ceilingCarryTimer - FIXED_TIME_STEP);
+        if (ceilingCarryTimer <= 0.0f) {
+            ceilingCarrySpeed = 0.0f;
+        }
+    }
+
     newPos.x += velocity.x;
 
     // Keep the player glued to slope surfaces while walking so the terrain
@@ -154,23 +200,57 @@ void App::HandleCharacterInput(
 
     if (Util::Input::IsKeyPressed(jumpKey) && onGround) {
         velocity.y = m_JumpSpeed * (inLiquid ? m_LiquidJumpScale : 1.0f);
+        if (inputDir != 0.0f) {
+            const float jumpLaunchMin = m_JumpHorizontalLaunchMin * liquidSpeedScale;
+            const float jumpLaunchMax = m_JumpHorizontalLaunchMax * liquidSpeedScale;
+
+            if (inputDir > 0.0f) {
+                velocity.x = std::clamp(
+                    std::max(velocity.x, jumpLaunchMin),
+                    0.0f,
+                    jumpLaunchMax
+                );
+            } else {
+                velocity.x = std::clamp(
+                    std::min(velocity.x, -jumpLaunchMin),
+                    -jumpLaunchMax,
+                    0.0f
+                );
+            }
+        }
         onGround = false;
     }
 }
 
 void App::UpdateFireboyPhysics() {
-    UpdateCharacterPhysics(m_Fireboy, m_FireboyVelocity, m_FireboyOnGround, m_FireboyCollision);
+    UpdateCharacterPhysics(
+        m_Fireboy,
+        m_FireboyVelocity,
+        m_FireboyOnGround,
+        m_FireboyCollision,
+        m_FireboyCeilingCarryTimer,
+        m_FireboyCeilingCarrySpeed
+    );
 }
 
 void App::UpdateWatergirlPhysics() {
-    UpdateCharacterPhysics(m_Watergirl, m_WatergirlVelocity, m_WatergirlOnGround, m_WatergirlCollision);
+    UpdateCharacterPhysics(
+        m_Watergirl,
+        m_WatergirlVelocity,
+        m_WatergirlOnGround,
+        m_WatergirlCollision,
+        m_WatergirlCeilingCarryTimer,
+        m_WatergirlCeilingCarrySpeed
+    );
 }
 
 void App::UpdateCharacterPhysics(
     const std::shared_ptr<HeadBodyCharacter>& character,
     glm::vec2& velocity,
     bool& onGround,
-    const CharacterCollisionProfile& profile
+    const CharacterCollisionProfile& profile,
+    float& ceilingCarryTimer,
+    float& ceilingCarrySpeed
 ) {
     if (!character || !character->IsAlive()) {
         return;
@@ -178,6 +258,7 @@ void App::UpdateCharacterPhysics(
 
     glm::vec2 oldPos = character->GetPosition();
     glm::vec2 newPos = oldPos;
+    const float preVerticalVelocityX = velocity.x;
 
     const bool inLiquid = IsCharacterInLiquid(character, profile);
     velocity.y -= m_Gravity * (inLiquid ? m_LiquidGravityScale : 1.0f);
@@ -187,7 +268,23 @@ void App::UpdateCharacterPhysics(
     }
     newPos.y += velocity.y;
 
-    ResolveVerticalCollisions(oldPos, newPos, profile, velocity, onGround);
+    bool hitCeiling = false;
+    ResolveVerticalCollisions(oldPos, newPos, profile, velocity, onGround, hitCeiling);
+
+    if (hitCeiling && std::abs(preVerticalVelocityX) > 0.01f) {
+        const float minCarrySpeed = m_JumpHorizontalLaunchMin * (inLiquid ? m_LiquidMoveSpeedScale : 1.0f);
+        ceilingCarryTimer = m_CeilingMomentumCarryDuration;
+        ceilingCarrySpeed = std::copysign(
+            std::max(std::abs(preVerticalVelocityX) * m_CeilingMomentumCarryBoost, minCarrySpeed),
+            preVerticalVelocityX
+        );
+    }
+
+    if (onGround) {
+        ceilingCarryTimer = 0.0f;
+        ceilingCarrySpeed = 0.0f;
+    }
+
     character->SetPosition(newPos);
 }
 
@@ -349,6 +446,126 @@ void App::UpdateVictorySequence() {
         if (m_Watergirl) {
             m_Watergirl->SetMotionState(HeadBodyCharacter::MotionState::Win);
         }
+    }
+}
+
+bool App::AreBothCharactersDead() const {
+    return m_Fireboy &&
+           m_Watergirl &&
+           m_Fireboy->GetLifeState() == HeadBodyCharacter::LifeState::Dead &&
+           m_Watergirl->GetLifeState() == HeadBodyCharacter::LifeState::Dead;
+}
+
+bool App::IsFailOverlayVisible() const {
+    return m_FailOverlayVisible;
+}
+
+App::FailOverlayAction App::GetFailOverlayAction() const {
+    if (!m_FailOverlayVisible) {
+        return FailOverlayAction::None;
+    }
+
+    if (Util::Input::IsKeyDown(Util::Keycode::R) ||
+        Util::Input::IsKeyDown(Util::Keycode::RETURN)) {
+        return FailOverlayAction::Restart;
+    }
+
+    if (Util::Input::IsKeyDown(Util::Keycode::H)) {
+        return FailOverlayAction::Home;
+    }
+
+    if (Util::Input::IsKeyDown(Util::Keycode::E)) {
+        return FailOverlayAction::Exit;
+    }
+
+    if (!Util::Input::IsKeyDown(Util::Keycode::MOUSE_LB) || m_FailOverlayMouseLatch) {
+        return FailOverlayAction::None;
+    }
+
+    const glm::vec2 cursor = Util::Input::GetCursorPosition();
+    const auto cursorInside = [&](const SolidRect& rect) {
+        return CheckAABB(cursor, {1.0f, 1.0f}, rect.center, rect.size);
+    };
+
+    if (cursorInside(m_FailRestartButton.rect)) {
+        return FailOverlayAction::Restart;
+    }
+    if (cursorInside(m_FailHomeButton.rect)) {
+        return FailOverlayAction::Home;
+    }
+    if (cursorInside(m_FailExitButton.rect)) {
+        return FailOverlayAction::Exit;
+    }
+
+    return FailOverlayAction::None;
+}
+
+void App::ResetFailOverlayLatch() {
+    if (!Util::Input::IsKeyPressed(Util::Keycode::MOUSE_LB)) {
+        m_FailOverlayMouseLatch = false;
+    }
+}
+
+void App::UpdateFailOverlayVisuals() {
+    for (const auto& object : m_FailOverlayObjects) {
+        if (object) {
+            object->SetVisible(m_FailOverlayVisible);
+        }
+    }
+
+    const glm::vec2 cursor = Util::Input::GetCursorPosition();
+    const auto hoveredColor = Util::Color(255, 220, 140, 255);
+    const auto normalColor = Util::Color(255, 255, 255, 255);
+
+    if (m_FailOverlayTitle) {
+        m_FailOverlayTitle->SetColor(Util::Color(255, 245, 220, 255));
+    }
+
+    auto updateButtonText = [&](FailOverlayButton& button) {
+        if (!button.labelObject) {
+            return;
+        }
+
+        const bool hovered = m_FailOverlayVisible &&
+            CheckAABB(cursor, {1.0f, 1.0f}, button.rect.center, button.rect.size);
+
+        button.labelObject->SetColor(hovered ? hoveredColor : normalColor);
+    };
+
+    updateButtonText(m_FailRestartButton);
+    updateButtonText(m_FailHomeButton);
+    updateButtonText(m_FailExitButton);
+}
+
+void App::UpdateFailOverlay() {
+    m_FailOverlayVisible = AreBothCharactersDead();
+    UpdateFailOverlayVisuals();
+
+    if (!m_FailOverlayVisible) {
+        ResetFailOverlayLatch();
+        return;
+    }
+
+    const FailOverlayAction action = GetFailOverlayAction();
+    if (Util::Input::IsKeyDown(Util::Keycode::MOUSE_LB)) {
+        m_FailOverlayMouseLatch = true;
+    } else {
+        m_FailOverlayMouseLatch = false;
+    }
+
+    switch (action) {
+    case FailOverlayAction::Restart:
+        m_CurrentState = State::START;
+        break;
+    case FailOverlayAction::Home:
+        // TODO: route this to a proper home/menu state once one exists.
+        m_CurrentState = State::START;
+        break;
+    case FailOverlayAction::Exit:
+        m_CurrentState = State::END;
+        break;
+    case FailOverlayAction::None:
+        break;
     }
 }
 
@@ -1092,13 +1309,14 @@ void App::ResolveVerticalCollisions(
     glm::vec2& newPos,
     const CharacterCollisionProfile& profile,
     glm::vec2& velocity,
-    bool& onGround
+    bool& onGround,
+    bool& hitCeiling
 ) {
     onGround = false;
+    hitCeiling = false;
 
     bool foundGround = false;
     float bestGroundY = -std::numeric_limits<float>::infinity();
-    bool hitCeiling = false;
 
     glm::vec2 oldBodyCenter = {0.0f, 0.0f};
     glm::vec2 oldBodySize = {0.0f, 0.0f};

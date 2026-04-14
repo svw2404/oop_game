@@ -2,10 +2,13 @@
 
 #include "Util/Input.hpp"
 #include "Util/Keycode.hpp"
+#include "Util/Time.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <limits>
+#include <sstream>
 #include <unordered_map>
 
 namespace {
@@ -27,6 +30,8 @@ void App::Update() {
     // 3. Process character input + physics
     // 4. Resolve hazards, pickups, doors, and victory
     if (IsFailOverlayVisible()) {
+        m_VictoryOverlayVisible = false;
+        UpdateVictoryOverlayVisuals();
         UpdateFailOverlay();
 
         if (Util::Input::IsKeyPressed(Util::Keycode::ESCAPE) || Util::Input::IfExit()) {
@@ -75,6 +80,7 @@ void App::Update() {
         m_CurrentState = State::END;
     }
 
+    UpdateVictoryOverlayVisuals();
     m_Root.Update();
 }
 
@@ -290,12 +296,8 @@ void App::UpdateCharacterPhysics(
     // Remember horizontal momentum after a ceiling hit so the next few frames
     // keep the jump feeling "floaty" instead of reflecting/killing x carry.
     if (hitCeiling && std::abs(preVerticalVelocityX) > 0.01f) {
-        const float minCarrySpeed = m_JumpHorizontalLaunchMin * (inLiquid ? m_LiquidMoveSpeedScale : 1.0f);
         ceilingCarryTimer = m_CeilingMomentumCarryDuration;
-        ceilingCarrySpeed = std::copysign(
-            std::max(std::abs(preVerticalVelocityX) * m_CeilingMomentumCarryBoost, minCarrySpeed),
-            preVerticalVelocityX
-        );
+        ceilingCarrySpeed = preVerticalVelocityX * m_CeilingMomentumCarryBoost;
     }
 
     if (onGround) {
@@ -398,11 +400,28 @@ void App::UpdateExitDoors() {
     updateDoorSprite(m_FireboyDoor);
     updateDoorSprite(m_WatergirlDoor);
 
-    if (m_VictoryPhase == VictoryPhase::None &&
+    const bool fireboyReadyForVictory =
+        m_Fireboy &&
+        m_Fireboy->IsAlive() &&
         m_FireboyDoor.occupied &&
-        m_WatergirlDoor.occupied) {
+        m_FireboyOnGround;
+    const bool watergirlReadyForVictory =
+        m_Watergirl &&
+        m_Watergirl->IsAlive() &&
+        m_WatergirlDoor.occupied &&
+        m_WatergirlOnGround;
+
+    if (m_VictoryPhase == VictoryPhase::None &&
+        fireboyReadyForVictory &&
+        watergirlReadyForVictory) {
         m_VictoryPhase = VictoryPhase::RunIntoDoor;
         m_VictoryTimer = 0.0f;
+        if (m_LevelCompleteTimeMs <= 0.0f) {
+            m_LevelCompleteTimeMs = std::max(
+                0.0f,
+                Util::Time::GetElapsedTimeMs() - m_LevelStartTimeMs
+            );
+        }
         m_FireboyVelocity = {0.0f, 0.0f};
         m_WatergirlVelocity = {0.0f, 0.0f};
     }
@@ -425,28 +444,53 @@ void App::UpdateVictorySequence() {
         m_VictoryTimer += FIXED_TIME_STEP;
 
         auto runIntoDoor = [&](const std::shared_ptr<HeadBodyCharacter>& character,
+                               const ExitDoor& door,
                                glm::vec2& velocity,
                                bool& onGround) {
-            if (!character) {
-                return;
+            if (!character || !door.sprite) {
+                return true;
             }
 
             velocity = {0.0f, 0.0f};
             onGround = true;
             zeroAirVisuals(character);
-            character->SetScale({1.0f, 1.0f});
-            character->SetMotionState(HeadBodyCharacter::MotionState::Move);
 
             glm::vec2 pos = character->GetPosition();
-            pos.x += m_MoveSpeed * 0.70f;
+            const float deltaX = door.sprite->GetPosition().x - pos.x;
+            const bool centered = std::abs(deltaX) <= m_VictoryDoorCenterTolerance;
+
+            if (!centered) {
+                const float moveX = std::clamp(deltaX, -m_VictoryAlignSpeed, m_VictoryAlignSpeed);
+                pos.x += moveX;
+                character->SetScale({moveX < 0.0f ? -1.0f : 1.0f, 1.0f});
+                character->SetMotionState(HeadBodyCharacter::MotionState::Move);
+            } else {
+                pos.x = door.sprite->GetPosition().x;
+                character->SetMotionState(HeadBodyCharacter::MotionState::Idle);
+            }
+
             character->SetPosition(pos);
+            return centered;
         };
 
-        runIntoDoor(m_Fireboy, m_FireboyVelocity, m_FireboyOnGround);
-        runIntoDoor(m_Watergirl, m_WatergirlVelocity, m_WatergirlOnGround);
+        const bool fireboyCentered = runIntoDoor(
+            m_Fireboy,
+            m_FireboyDoor,
+            m_FireboyVelocity,
+            m_FireboyOnGround
+        );
+        const bool watergirlCentered = runIntoDoor(
+            m_Watergirl,
+            m_WatergirlDoor,
+            m_WatergirlVelocity,
+            m_WatergirlOnGround
+        );
 
-        if (m_VictoryTimer >= m_VictoryRunDuration) {
+        if (m_VictoryTimer >= m_VictoryRunDuration &&
+            fireboyCentered &&
+            watergirlCentered) {
             m_VictoryPhase = VictoryPhase::Celebrate;
+            m_VictoryTimer = 0.0f;
             m_FireboyVelocity = {0.0f, 0.0f};
             m_WatergirlVelocity = {0.0f, 0.0f};
             zeroAirVisuals(m_Fireboy);
@@ -462,6 +506,7 @@ void App::UpdateVictorySequence() {
     }
 
     if (m_VictoryPhase == VictoryPhase::Celebrate) {
+        m_VictoryTimer += FIXED_TIME_STEP;
         m_FireboyVelocity = {0.0f, 0.0f};
         m_WatergirlVelocity = {0.0f, 0.0f};
         zeroAirVisuals(m_Fireboy);
@@ -597,15 +642,103 @@ void App::UpdateFailOverlay() {
     }
 }
 
+void App::UpdateVictoryOverlayVisuals() {
+    m_VictoryOverlayVisible =
+        (m_VictoryPhase == VictoryPhase::Celebrate) &&
+        (m_VictoryTimer >= std::max(0.0f, m_VictoryCelebrateDuration));
+
+    for (const auto& object : m_VictoryOverlayObjects) {
+        if (object) {
+            object->SetVisible(m_VictoryOverlayVisible);
+        }
+    }
+
+    if (!m_VictoryOverlayVisible) {
+        return;
+    }
+
+    const auto formatTimeText = [](float elapsedMs) {
+        const int totalSeconds = std::max(0, static_cast<int>(std::round(elapsedMs / 1000.0f)));
+        const int minutes = totalSeconds / 60;
+        const int seconds = totalSeconds % 60;
+
+        std::ostringstream stream;
+        stream << std::setfill('0')
+               << std::setw(2) << minutes
+               << ":"
+               << std::setw(2) << seconds;
+        return stream.str();
+    };
+
+    // The original games clearly rank faster / more complete runs higher, but
+    // exact public thresholds were not available in our source pass. This is
+    // an inferred grade scale so the overlay already communicates progress.
+    const int collectedDiamonds =
+        m_FireDiamondsCollected + m_WaterDiamondsCollected + m_GreenDiamondsCollected;
+    const int totalDiamonds =
+        std::max(1, m_FireDiamondsTotal + m_WaterDiamondsTotal + m_GreenDiamondsTotal);
+    const float collectedRatio =
+        static_cast<float>(collectedDiamonds) / static_cast<float>(totalDiamonds);
+    const float elapsedSeconds = std::max(0.0f, m_LevelCompleteTimeMs / 1000.0f);
+
+    std::string rank = "C";
+    if (collectedRatio >= 0.999f && elapsedSeconds <= 65.0f) {
+        rank = "S";
+    } else if (collectedRatio >= 0.85f && elapsedSeconds <= 95.0f) {
+        rank = "A";
+    } else if (collectedRatio >= 0.60f || elapsedSeconds <= 140.0f) {
+        rank = "B";
+    }
+
+    if (m_VictoryOverlayTitle) {
+        m_VictoryOverlayTitle->SetColor(Util::Color(255, 245, 220, 255));
+    }
+    if (m_VictoryTimeText) {
+        m_VictoryTimeText->SetText(formatTimeText(m_LevelCompleteTimeMs));
+        m_VictoryTimeText->SetColor(Util::Color(255, 255, 255, 255));
+    }
+    if (m_VictoryBlueDiamondText) {
+        m_VictoryBlueDiamondText->SetText("x " + std::to_string(m_WaterDiamondsCollected));
+        m_VictoryBlueDiamondText->SetColor(Util::Color(240, 248, 255, 255));
+    }
+    if (m_VictoryRedDiamondText) {
+        m_VictoryRedDiamondText->SetText("x " + std::to_string(m_FireDiamondsCollected));
+        m_VictoryRedDiamondText->SetColor(Util::Color(255, 235, 230, 255));
+    }
+    if (m_VictoryRankText) {
+        m_VictoryRankText->SetText("Rank: " + rank);
+        m_VictoryRankText->SetColor(Util::Color(255, 230, 170, 255));
+    }
+
+    // Continue is intentionally hover-ready but not routed yet because the
+    // game still has no next-level/home flow to transition into.
+    if (m_VictoryContinueButton.labelObject) {
+        const glm::vec2 cursor = Util::Input::GetCursorPosition();
+        const bool hovered = CheckAABB(
+            cursor,
+            {1.0f, 1.0f},
+            m_VictoryContinueButton.rect.center,
+            m_VictoryContinueButton.rect.size
+        );
+        m_VictoryContinueButton.labelObject->SetColor(
+            hovered
+                ? Util::Color(255, 220, 140, 255)
+                : Util::Color(255, 255, 255, 255)
+        );
+    }
+}
+
 void App::CheckHazards() {
     // Hazard rules currently match the classic element logic:
-    // Fireboy dies in water, Watergirl dies in lava.
+    // Fireboy dies in water, Watergirl dies in lava, and venom kills both.
     auto isFatal = [](HazardRect::Type type, bool isFireboy) {
         switch (type) {
         case HazardRect::Type::Lava:
             return !isFireboy;
         case HazardRect::Type::Water:
             return isFireboy;
+        case HazardRect::Type::Venom:
+            return true;
         }
 
         return false;
@@ -1289,7 +1422,43 @@ void App::UpdateGreenPlatform() {
         return;
     }
 
-    m_GreenButtonPressed = IsGreenButtonPressed();
+    const auto animateButtonPress = [&](const std::shared_ptr<Character>& button,
+                                        bool pressed) {
+        if (!button) {
+            return;
+        }
+
+        const float targetVisual = pressed ? 1.0f : 0.0f;
+        const float deltaVisual = targetVisual - m_GreenButtonAfterPressVisual;
+        const float stepVisual = std::abs(deltaVisual) <= m_GreenButtonAnimSpeed
+            ? deltaVisual
+            : std::copysign(m_GreenButtonAnimSpeed, deltaVisual);
+        m_GreenButtonAfterPressVisual = std::clamp(
+            m_GreenButtonAfterPressVisual + stepVisual,
+            0.0f,
+            1.0f
+        );
+
+        const float collapsedHeight = std::max(0.1f, m_GreenButtonAfterBaseSize.y * 0.01f);
+        const float currentHeight =
+            m_GreenButtonAfterBaseSize.y +
+            (collapsedHeight - m_GreenButtonAfterBaseSize.y) * m_GreenButtonAfterPressVisual;
+        const float baseBottomY =
+            m_GreenButtonAfterBasePosition.y - m_GreenButtonAfterBaseSize.y * 0.5f;
+        const float buriedBottomY =
+            baseBottomY - m_GreenButtonPressDepth * m_GreenButtonAfterPressVisual;
+
+        const bool fullyBuried = m_GreenButtonAfterPressVisual >= 0.98f;
+        button->SetVisible(!fullyBuried);
+        button->SetSize({m_GreenButtonAfterBaseSize.x, currentHeight});
+        glm::vec2 pos = m_GreenButtonAfterBasePosition;
+        pos.y = buriedBottomY + currentHeight * 0.5f;
+        button->SetPosition(pos);
+    };
+
+    const bool afterButtonPressed = IsGreenButtonPressed();
+    m_GreenButtonPressed = m_GreenSwitchOn || afterButtonPressed;
+    animateButtonPress(m_GreenButtonAfter, afterButtonPressed);
 
     const SolidRect oldPlatform = m_GreenPlatformCurrentRect;
     const float targetY = m_GreenButtonPressed
@@ -1314,15 +1483,15 @@ void App::UpdateGreenPlatform() {
 }
 
 bool App::IsGreenButtonPressed() const {
-    return CharacterTouchesRect(m_Fireboy, m_FireboyCollision, m_GreenButtonHitbox) ||
-           CharacterTouchesRect(m_Watergirl, m_WatergirlCollision, m_GreenButtonHitbox) ||
-           CharacterTouchesRect(m_Fireboy, m_FireboyCollision, m_GreenButtonAfterHitbox) ||
-           CharacterTouchesRect(m_Watergirl, m_WatergirlCollision, m_GreenButtonAfterHitbox) ||
-           CubeTouchesRect(m_GreenButtonHitbox) ||
-           CubeTouchesRect(m_GreenButtonAfterHitbox);
+    return CharacterPressesRectFromAbove(m_Fireboy, m_FireboyCollision, m_GreenButtonAfterHitbox) ||
+           CharacterPressesRectFromAbove(m_Watergirl, m_WatergirlCollision, m_GreenButtonAfterHitbox) ||
+           CubePressesRectFromAbove(m_GreenButtonAfterHitbox);
 }
 
 bool App::IsGreenSwitchTouched() const {
+    // The switch is a touch/toggle object, not a pressure plate. Using full
+    // overlap here makes it much more reliable than the strict top-only button
+    // logic, especially after restart and during quick approach movement.
     return CharacterTouchesRect(m_Fireboy, m_FireboyCollision, m_GreenSwitchHitbox) ||
            CharacterTouchesRect(m_Watergirl, m_WatergirlCollision, m_GreenSwitchHitbox) ||
            CubeTouchesRect(m_GreenSwitchHitbox);
@@ -1344,6 +1513,58 @@ bool App::IsCharacterAtDoor(
     }
 
     return CharacterTouchesRect(character, profile, door.triggerRect);
+}
+
+bool App::CharacterPressesRectFromAbove(
+    const std::shared_ptr<HeadBodyCharacter>& character,
+    const CharacterCollisionProfile& profile,
+    const SolidRect& rect
+) const {
+    if (!character || !character->IsAlive()) {
+        return false;
+    }
+
+    glm::vec2 bodyCenter = {0.0f, 0.0f};
+    glm::vec2 bodySize = {0.0f, 0.0f};
+    GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
+
+    const float bodyLeft = bodyCenter.x - bodySize.x * 0.5f;
+    const float bodyRight = bodyCenter.x + bodySize.x * 0.5f;
+    const float feetY = bodyCenter.y - bodySize.y * 0.5f;
+    const float rectLeft = rect.center.x - rect.size.x * 0.5f;
+    const float rectRight = rect.center.x + rect.size.x * 0.5f;
+    const float rectTop = rect.center.y + rect.size.y * 0.5f;
+
+    const bool horizontallyOverlaps =
+        bodyRight > rectLeft + m_FootProbeInset &&
+        bodyLeft < rectRight - m_FootProbeInset;
+    const bool feetOnTop =
+        feetY >= rectTop - m_GroundStickTolerance &&
+        feetY <= rectTop + m_GroundSnapTolerance;
+
+    return horizontallyOverlaps && feetOnTop;
+}
+
+bool App::CubePressesRectFromAbove(const SolidRect& rect) const {
+    if (!m_Cube || !m_HasCubeBlock) {
+        return false;
+    }
+
+    const float cubeLeft = m_CubeRect.center.x - m_CubeRect.size.x * 0.5f;
+    const float cubeRight = m_CubeRect.center.x + m_CubeRect.size.x * 0.5f;
+    const float cubeBottom = m_CubeRect.center.y - m_CubeRect.size.y * 0.5f;
+    const float rectLeft = rect.center.x - rect.size.x * 0.5f;
+    const float rectRight = rect.center.x + rect.size.x * 0.5f;
+    const float rectTop = rect.center.y + rect.size.y * 0.5f;
+
+    const bool horizontallyOverlaps =
+        cubeRight > rectLeft + m_FootProbeInset &&
+        cubeLeft < rectRight - m_FootProbeInset;
+    const bool bottomOnTop =
+        cubeBottom >= rectTop - m_GroundStickTolerance &&
+        cubeBottom <= rectTop + m_GroundSnapTolerance;
+
+    return horizontallyOverlaps && bottomOnTop;
 }
 
 bool App::CharacterTouchesRect(
@@ -1384,6 +1605,62 @@ bool App::CharacterTouchesHazard(
 
     return CheckAABB(bodyCenter, bodySize, hazard.center, hazard.size) ||
            CheckAABB(headCenter, headSize, hazard.center, hazard.size);
+}
+
+bool App::WouldCharacterHitTerrainAt(
+    const glm::vec2& bodyPos,
+    const CharacterCollisionProfile& profile,
+    bool allowSupportContacts,
+    std::size_t ignoredSolidBlockIndex
+) const {
+    glm::vec2 bodyCenter = {0.0f, 0.0f};
+    glm::vec2 bodySize = {0.0f, 0.0f};
+    glm::vec2 headCenter = {0.0f, 0.0f};
+    glm::vec2 headSize = {0.0f, 0.0f};
+    GetCharacterBodyBox(bodyPos, profile, bodyCenter, bodySize);
+    GetCharacterHeadBox(bodyPos, profile, headCenter, headSize);
+
+    const float bodyBottom = bodyCenter.y - bodySize.y * 0.5f;
+    const float headTop = headCenter.y + headSize.y * 0.5f;
+
+    for (std::size_t i = 0; i < m_SolidBlocks.size(); ++i) {
+        if (i == ignoredSolidBlockIndex) {
+            continue;
+        }
+
+        const auto& block = m_SolidBlocks[i];
+        const bool bodyOverlap = CheckAABB(bodyCenter, bodySize, block.center, block.size);
+        const bool headOverlap = CheckAABB(headCenter, headSize, block.center, block.size);
+        if (!bodyOverlap && !headOverlap) {
+            continue;
+        }
+
+        const float blockTop = block.center.y + block.size.y * 0.5f;
+        const bool isSupportContact =
+            allowSupportContacts &&
+            bodyBottom >= blockTop - m_GroundSnapTolerance &&
+            bodyBottom <= blockTop + m_SlopeSnapTolerance;
+
+        if (!isSupportContact) {
+            return true;
+        }
+    }
+
+    float slopeGroundY = 0.0f;
+    if (FindBestSlopeYAtX(bodyPos, bodyPos.x, slopeGroundY, profile) &&
+        bodyBottom < slopeGroundY - m_GroundSnapTolerance) {
+        return true;
+    }
+
+    float ceilingY = 0.0f;
+    const float maxCeilingDistance =
+        profile.bodyHitboxSize.y + profile.headHitboxSize.y + m_CeilingStickTolerance;
+    if (FindNearbyCeilingY(bodyPos, maxCeilingDistance, ceilingY, profile) &&
+        headTop > ceilingY + m_CeilingStickTolerance) {
+        return true;
+    }
+
+    return false;
 }
 
 bool App::IsCharacterInLiquid(
@@ -1435,9 +1712,11 @@ void App::CarryCharacterWithPlatform(
         return;
     }
 
-    glm::vec2 pos = character->GetPosition();
-    pos.y += platformDeltaY;
-    character->SetPosition(pos);
+    const glm::vec2 currentPos = character->GetPosition();
+    const glm::vec2 carriedPos = currentPos + glm::vec2{0.0f, platformDeltaY};
+    if (!WouldCharacterHitTerrainAt(carriedPos, profile)) {
+        character->SetPosition(carriedPos);
+    }
 }
 
 void App::CarryCharacterWithCube(
@@ -1494,9 +1773,28 @@ void App::CarryCharacterWithCube(
 
     glm::vec2 pos = character->GetPosition();
     if (standingOnCube) {
-        pos += cubeDelta;
+        glm::vec2 carriedPos = pos;
+
+        if (std::abs(cubeDelta.y) > 0.001f) {
+            const glm::vec2 yOnlyPos = carriedPos + glm::vec2{0.0f, cubeDelta.y};
+            if (!WouldCharacterHitTerrainAt(yOnlyPos, profile, true, m_CubeBlockIndex)) {
+                carriedPos = yOnlyPos;
+            }
+        }
+
+        if (std::abs(cubeDelta.x) > 0.001f) {
+            const glm::vec2 xyPos = carriedPos + glm::vec2{cubeDelta.x, 0.0f};
+            if (!WouldCharacterHitTerrainAt(xyPos, profile, true, m_CubeBlockIndex)) {
+                carriedPos = xyPos;
+            }
+        }
+
+        pos = carriedPos;
     } else {
-        pos.x += cubeDelta.x;
+        const glm::vec2 pushedPos = pos + glm::vec2{cubeDelta.x, 0.0f};
+        if (!WouldCharacterHitTerrainAt(pushedPos, profile, true, m_CubeBlockIndex)) {
+            pos = pushedPos;
+        }
     }
     character->SetPosition(pos);
 }
@@ -1750,7 +2048,8 @@ void App::ResolveVerticalCollisions(
         hitCeiling = ResolveCeilingSlopeCollision(oldPos, newPos, profile, velocity);
     }
 
-    if (!hitCeiling && velocity.y > 0.0f) {
+    const bool allowStickyCeilingSnap = std::abs(velocity.x) <= m_CeilingSideGlideThreshold;
+    if (!hitCeiling && velocity.y > 0.0f && allowStickyCeilingSnap) {
         float stickyCeilingY = 0.0f;
         if (FindNearbyCeilingY(newPos, m_CeilingStickTolerance, stickyCeilingY, profile)) {
             newPos.y = stickyCeilingY - (profile.headHitboxOffset.y + profile.headHitboxSize.y * 0.5f);

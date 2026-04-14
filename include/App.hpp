@@ -113,6 +113,13 @@ private:
         std::shared_ptr<OverlayText> labelObject;
     };
 
+    struct VictoryOverlayButton {
+        std::string label;
+        std::string futureAssetPath;
+        SolidRect rect;
+        std::shared_ptr<OverlayText> labelObject;
+    };
+
     // ------------------------------------------------------------------------
     // Core gameplay steps
     // ------------------------------------------------------------------------
@@ -172,6 +179,7 @@ private:
     void UpdateDeathSequence();
     void UpdateExitDoors();
     void UpdateVictorySequence();
+    void UpdateVictoryOverlayVisuals();
     void UpdateFailOverlay();
     void UpdateFailOverlayVisuals();
     void ResetFailOverlayLatch();
@@ -186,6 +194,12 @@ private:
         const CharacterCollisionProfile& profile,
         const ExitDoor& door
     ) const;
+    bool CharacterPressesRectFromAbove(
+        const std::shared_ptr<HeadBodyCharacter>& character,
+        const CharacterCollisionProfile& profile,
+        const SolidRect& rect
+    ) const;
+    bool CubePressesRectFromAbove(const SolidRect& rect) const;
     bool CharacterTouchesRect(
         const std::shared_ptr<HeadBodyCharacter>& character,
         const CharacterCollisionProfile& profile,
@@ -195,6 +209,12 @@ private:
         const std::shared_ptr<HeadBodyCharacter>& character,
         const CharacterCollisionProfile& profile,
         const HazardRect& hazard
+    ) const;
+    bool WouldCharacterHitTerrainAt(
+        const glm::vec2& bodyPos,
+        const CharacterCollisionProfile& profile,
+        bool allowSupportContacts = true,
+        std::size_t ignoredSolidBlockIndex = static_cast<std::size_t>(-1)
     ) const;
     bool IsCharacterInLiquid(
         const std::shared_ptr<HeadBodyCharacter>& character,
@@ -356,6 +376,7 @@ private:
     std::vector<std::shared_ptr<Character>> m_LevelProps;
     std::vector<std::shared_ptr<Util::GameObject>> m_AnimatedLevelProps;
     std::vector<std::shared_ptr<Util::GameObject>> m_FailOverlayObjects;
+    std::vector<std::shared_ptr<Util::GameObject>> m_VictoryOverlayObjects;
     std::vector<CollectibleDiamond> m_Diamonds;
 
     // ------------------------------------------------------------------------
@@ -367,6 +388,9 @@ private:
     glm::vec2 m_FireboySpawnPosition = {0.0f, 0.0f};
     glm::vec2 m_WatergirlSpawnPosition = {0.0f, 0.0f};
     glm::vec2 m_CubeSpawnPosition = {0.0f, 0.0f};
+    glm::vec2 m_GreenButtonBasePosition = {0.0f, 0.0f};
+    glm::vec2 m_GreenButtonAfterBasePosition = {0.0f, 0.0f};
+    glm::vec2 m_GreenButtonAfterBaseSize = {0.0f, 0.0f};
     glm::vec2 m_FireboyDeathStartScale = {1.0f, 1.0f};
     glm::vec2 m_WatergirlDeathStartScale = {1.0f, 1.0f};
     bool m_FireboyOnGround = false;
@@ -391,12 +415,13 @@ private:
     float m_DeathAnimationDuration = 0.28f;
     float m_DeathSinkSpeed = 0.95f;
     float m_DeathEndScale = 0.52f;
-    float m_CeilingMomentumCarryDuration = 0.28f;
-    float m_CeilingMomentumCarryBoost = 1.34f;
-    float m_CeilingMomentumCarryFloor = 0.94f;
+    float m_CeilingMomentumCarryDuration = 0.18f;
+    float m_CeilingMomentumCarryBoost = 1.08f;
+    float m_CeilingMomentumCarryFloor = 0.74f;
     float m_GroundSnapTolerance = 4.0f;
     float m_GroundStickTolerance = 14.0f;
-    float m_CeilingStickTolerance = 10.0f;
+    float m_CeilingStickTolerance = 4.0f;
+    float m_CeilingSideGlideThreshold = 1.25f;
     float m_SlopeSnapTolerance = 10.0f;
     float m_StepUpHeight = 14.0f;
     float m_SlopeTopTransitionHeight = 36.0f;
@@ -429,6 +454,8 @@ private:
     std::vector<CeilingSlopeSurface> m_CeilingSlopes;
     std::vector<HazardRect> m_Hazards;
     SolidRect m_TestBlock;
+    SolidRect m_LeftFloorSpawnRect;
+    SolidRect m_LeftWallSpawnRect;
     SolidRect m_GreenPlatformRestRect;
     SolidRect m_GreenPlatformPressedRect;
     SolidRect m_GreenPlatformCurrentRect;
@@ -454,9 +481,17 @@ private:
     float m_CubePushSpeed = 1.15f;
     float m_CubePushAcceleration = 0.10f;
     float m_CubeDeceleration = 0.08f;
+    float m_GreenButtonPressDepth = 7.5f;
+    float m_GreenButtonAnimSpeed = 0.10f;
+    float m_GreenButtonAfterPressVisual = 0.0f;
     VictoryPhase m_VictoryPhase = VictoryPhase::None;
     float m_VictoryTimer = 0.0f;
     float m_VictoryRunDuration = 0.30f;
+    float m_VictoryCelebrateDuration = 0.0f;
+    float m_VictoryAlignSpeed = 0.85f;
+    float m_VictoryDoorCenterTolerance = 2.5f;
+    float m_LevelStartTimeMs = 0.0f;
+    float m_LevelCompleteTimeMs = 0.0f;
     float m_DoorFrameDuration = 0.06f;
     bool m_FailOverlayVisible = false;
     bool m_FailOverlayMouseLatch = false;
@@ -465,6 +500,16 @@ private:
     FailOverlayButton m_FailRestartButton;
     FailOverlayButton m_FailHomeButton;
     FailOverlayButton m_FailExitButton;
+    bool m_VictoryOverlayVisible = false;
+    std::shared_ptr<Character> m_VictoryOverlayPanel;
+    std::shared_ptr<OverlayText> m_VictoryOverlayTitle;
+    std::shared_ptr<OverlayText> m_VictoryTimeText;
+    std::shared_ptr<Character> m_VictoryBlueDiamondIcon;
+    std::shared_ptr<Character> m_VictoryRedDiamondIcon;
+    std::shared_ptr<OverlayText> m_VictoryBlueDiamondText;
+    std::shared_ptr<OverlayText> m_VictoryRedDiamondText;
+    std::shared_ptr<OverlayText> m_VictoryRankText;
+    VictoryOverlayButton m_VictoryContinueButton;
 };
 
 #endif // APP_HPP

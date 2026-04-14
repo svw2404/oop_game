@@ -11,25 +11,6 @@
 
 static std::unordered_map<HeadBodyCharacter*, glm::vec2> s_LastPos;
 
-// TODO(Roadmap):
-// - Build the real front-end flow: intro screen, home/menu, options, sound,
-//   credits, and pause UI, based on the original game's structure.
-// - Add a level-select world map with connected-path progression and 5 total
-//   levels represented by emerald/gem nodes.
-// - Prepare 5 clean level backgrounds without baked gameplay props, then place
-//   doors, liquids, diamonds, switches, cubes, and platforms in code.
-// - Reposition and recenter our diamonds to match the original Level 1 layout
-//   more closely after comparing against gameplay footage.
-// - Clean the liquid assets by trimming the side edges so no thin line floats
-//   above the floor.
-// - Clean the door assets by trimming the screenshot borders on both sides.
-// - Add full game-feel polish: music, SFX, pause/home/restart/mute controls,
-//   stored progression, stored rank, and stored diamond totals.
-// - Keep polishing gameplay edge cases: remaining slope seams, cube-on-slope
-//   behavior, door trigger feel, liquid death feel, and z-order/hitbox cleanup.
-// - Decide whether to preserve the current controls or switch to the original
-//   default mapping (Fireboy arrows, Watergirl A/W/D).
-
 void App::Start() {
     LOG_TRACE("Start");
     // Rebuild the whole scene graph on every Start() so restarting the level
@@ -900,11 +881,7 @@ void App::Start() {
         m_Fireboy->SetIdleHeadImage(idleHeadPaths, 120, true);
         m_Fireboy->SetJumpHeadImage(jumpHeadPaths, 120, true);
         m_Fireboy->SetFallHeadImage(fallHeadPaths, 120, true);
-        m_Fireboy->SetWinHeadImage(winHeadPaths, 560, false);
-        m_VictoryCelebrateDuration = std::max(
-            m_VictoryCelebrateDuration,
-            static_cast<float>(winHeadPaths.size()) * 0.56f
-        );
+        m_Fireboy->SetWinHeadImage(winHeadPaths, 280, false);
         m_Fireboy->SetLifeState(HeadBodyCharacter::LifeState::Alive);
         m_Fireboy->SetMotionState(HeadBodyCharacter::MotionState::Idle);
 
@@ -1043,11 +1020,7 @@ void App::Start() {
         m_Watergirl->SetIdleHeadImage(idleHeadPaths, 120, true);
         m_Watergirl->SetJumpHeadImage(jumpHeadPaths, 120, true);
         m_Watergirl->SetFallHeadImage(fallHeadPaths, 120, true);
-        m_Watergirl->SetWinHeadImage(winHeadPaths, 560, false);
-        m_VictoryCelebrateDuration = std::max(
-            m_VictoryCelebrateDuration,
-            static_cast<float>(winHeadPaths.size()) * 0.56f
-        );
+        m_Watergirl->SetWinHeadImage(winHeadPaths, 280, false);
         m_Watergirl->SetLifeState(HeadBodyCharacter::LifeState::Alive);
         m_Watergirl->SetMotionState(HeadBodyCharacter::MotionState::Idle);
 

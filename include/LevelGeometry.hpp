@@ -23,6 +23,7 @@ struct HazardRect {
     enum class Type {
         Lava,
         Water,
+        Venom,
     };
 
     glm::vec2 center = {0.0f, 0.0f};

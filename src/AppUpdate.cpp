@@ -491,6 +491,14 @@ void App::UpdateVictorySequence() {
             watergirlCentered) {
             m_VictoryPhase = VictoryPhase::Celebrate;
             m_VictoryTimer = 0.0f;
+            if (m_Fireboy) {
+                m_FireboyVictoryStartPosition = m_Fireboy->GetPosition();
+                m_FireboyVictoryStartScale = m_Fireboy->GetTransform().scale;
+            }
+            if (m_Watergirl) {
+                m_WatergirlVictoryStartPosition = m_Watergirl->GetPosition();
+                m_WatergirlVictoryStartScale = m_Watergirl->GetTransform().scale;
+            }
             m_FireboyVelocity = {0.0f, 0.0f};
             m_WatergirlVelocity = {0.0f, 0.0f};
             zeroAirVisuals(m_Fireboy);
@@ -511,12 +519,55 @@ void App::UpdateVictorySequence() {
         m_WatergirlVelocity = {0.0f, 0.0f};
         zeroAirVisuals(m_Fireboy);
         zeroAirVisuals(m_Watergirl);
-        if (m_Fireboy) {
-            m_Fireboy->SetMotionState(HeadBodyCharacter::MotionState::Win);
-        }
-        if (m_Watergirl) {
-            m_Watergirl->SetMotionState(HeadBodyCharacter::MotionState::Win);
-        }
+        const float progress = std::clamp(
+            m_VictoryTimer / std::max(0.001f, m_VictoryCelebrateDuration),
+            0.0f,
+            1.0f
+        );
+        auto sinkIntoDoor = [&](const std::shared_ptr<HeadBodyCharacter>& character,
+                                const ExitDoor& door,
+                                const glm::vec2& startPos,
+                                const glm::vec2& startScale) {
+            if (!character || !door.sprite) {
+                return;
+            }
+
+            character->SetMotionState(HeadBodyCharacter::MotionState::Win);
+
+            const glm::vec2 targetPos = door.triggerRect.center + glm::vec2{
+                0.0f,
+                m_VictoryDoorSinkYOffset
+            };
+            const glm::vec2 currentPos = {
+                targetPos.x,
+                startPos.y + (targetPos.y - startPos.y) * progress,
+            };
+
+            const float scaleXSign = startScale.x < 0.0f ? -1.0f : 1.0f;
+            const float startScaleMagnitude = std::abs(startScale.y);
+            const float currentScaleMagnitude =
+                startScaleMagnitude +
+                (m_VictoryDoorSinkScale - startScaleMagnitude) * progress;
+
+            character->SetScale({
+                scaleXSign * currentScaleMagnitude,
+                currentScaleMagnitude,
+            });
+            character->SetPosition(currentPos);
+        };
+
+        sinkIntoDoor(
+            m_Fireboy,
+            m_FireboyDoor,
+            m_FireboyVictoryStartPosition,
+            m_FireboyVictoryStartScale
+        );
+        sinkIntoDoor(
+            m_Watergirl,
+            m_WatergirlDoor,
+            m_WatergirlVictoryStartPosition,
+            m_WatergirlVictoryStartScale
+        );
     }
 }
 
@@ -643,9 +694,15 @@ void App::UpdateFailOverlay() {
 }
 
 void App::UpdateVictoryOverlayVisuals() {
+    const bool fireboyWinFinished = !m_Fireboy || m_Fireboy->IsWinAnimationFinished();
+    const bool watergirlWinFinished = !m_Watergirl || m_Watergirl->IsWinAnimationFinished();
+    const bool celebrationFinished =
+        (fireboyWinFinished && watergirlWinFinished) ||
+        (m_VictoryTimer >= std::max(0.0f, m_VictoryCelebrateDuration));
+
     m_VictoryOverlayVisible =
         (m_VictoryPhase == VictoryPhase::Celebrate) &&
-        (m_VictoryTimer >= std::max(0.0f, m_VictoryCelebrateDuration));
+        celebrationFinished;
 
     for (const auto& object : m_VictoryOverlayObjects) {
         if (object) {

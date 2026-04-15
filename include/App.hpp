@@ -393,6 +393,10 @@ private:
     glm::vec2 m_GreenButtonAfterBaseSize = {0.0f, 0.0f};
     glm::vec2 m_FireboyDeathStartScale = {1.0f, 1.0f};
     glm::vec2 m_WatergirlDeathStartScale = {1.0f, 1.0f};
+    glm::vec2 m_FireboyVictoryStartPosition = {0.0f, 0.0f};
+    glm::vec2 m_WatergirlVictoryStartPosition = {0.0f, 0.0f};
+    glm::vec2 m_FireboyVictoryStartScale = {1.0f, 1.0f};
+    glm::vec2 m_WatergirlVictoryStartScale = {1.0f, 1.0f};
     bool m_FireboyOnGround = false;
     bool m_WatergirlOnGround = false;
     bool m_CubeOnGround = false;
@@ -490,6 +494,8 @@ private:
     float m_VictoryCelebrateDuration = 0.0f;
     float m_VictoryAlignSpeed = 0.85f;
     float m_VictoryDoorCenterTolerance = 2.5f;
+    float m_VictoryDoorSinkScale = 0.38f;
+    float m_VictoryDoorSinkYOffset = 2.0f;
     float m_LevelStartTimeMs = 0.0f;
     float m_LevelCompleteTimeMs = 0.0f;
     float m_DoorFrameDuration = 0.06f;

@@ -399,6 +399,18 @@ void HeadBodyCharacter::SetLifeState(LifeState state) {
     RefreshDrawables();
 }
 
+bool HeadBodyCharacter::IsWinAnimationFinished() const {
+    if (!m_WinHeadDrawable) {
+        return true;
+    }
+
+    if (auto anim = std::dynamic_pointer_cast<Util::Animation>(m_WinHeadDrawable)) {
+        return anim->GetState() == Util::Animation::State::ENDED;
+    }
+
+    return true;
+}
+
 glm::vec2 HeadBodyCharacter::GetBodySize() const {
     auto currentBody = GetActiveBodyDrawable();
     if (!currentBody) {

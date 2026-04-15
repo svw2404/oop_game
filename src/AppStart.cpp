@@ -81,6 +81,10 @@ void App::Start() {
     m_CubeVelocity = {0.0f, 0.0f};
     m_FireboyDeathStartScale = {1.0f, 1.0f};
     m_WatergirlDeathStartScale = {1.0f, 1.0f};
+    m_FireboyVictoryStartPosition = {0.0f, 0.0f};
+    m_WatergirlVictoryStartPosition = {0.0f, 0.0f};
+    m_FireboyVictoryStartScale = {1.0f, 1.0f};
+    m_WatergirlVictoryStartScale = {1.0f, 1.0f};
     m_CubeOnGround = false;
     m_FireboyDeathTimer = 0.0f;
     m_WatergirlDeathTimer = 0.0f;
@@ -900,10 +904,10 @@ void App::Start() {
         m_Fireboy->SetIdleHeadImage(idleHeadPaths, 120, true);
         m_Fireboy->SetJumpHeadImage(jumpHeadPaths, 120, true);
         m_Fireboy->SetFallHeadImage(fallHeadPaths, 120, true);
-        m_Fireboy->SetWinHeadImage(winHeadPaths, 560, false);
+        m_Fireboy->SetWinHeadImage(winHeadPaths, 360, false);
         m_VictoryCelebrateDuration = std::max(
             m_VictoryCelebrateDuration,
-            static_cast<float>(winHeadPaths.size()) * 0.56f
+            static_cast<float>(std::max<std::size_t>(1, winHeadPaths.size()) - 1) * 0.36f
         );
         m_Fireboy->SetLifeState(HeadBodyCharacter::LifeState::Alive);
         m_Fireboy->SetMotionState(HeadBodyCharacter::MotionState::Idle);
@@ -1043,10 +1047,10 @@ void App::Start() {
         m_Watergirl->SetIdleHeadImage(idleHeadPaths, 120, true);
         m_Watergirl->SetJumpHeadImage(jumpHeadPaths, 120, true);
         m_Watergirl->SetFallHeadImage(fallHeadPaths, 120, true);
-        m_Watergirl->SetWinHeadImage(winHeadPaths, 560, false);
+        m_Watergirl->SetWinHeadImage(winHeadPaths, 360, false);
         m_VictoryCelebrateDuration = std::max(
             m_VictoryCelebrateDuration,
-            static_cast<float>(winHeadPaths.size()) * 0.56f
+            static_cast<float>(std::max<std::size_t>(1, winHeadPaths.size()) - 1) * 0.36f
         );
         m_Watergirl->SetLifeState(HeadBodyCharacter::LifeState::Alive);
         m_Watergirl->SetMotionState(HeadBodyCharacter::MotionState::Idle);

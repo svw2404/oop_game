@@ -117,6 +117,7 @@ public:
     void SetLifeState(LifeState state);
     [[nodiscard]] LifeState GetLifeState() const { return m_LifeState; }
     [[nodiscard]] bool IsAlive() const { return m_LifeState == LifeState::Alive; }
+    [[nodiscard]] bool IsWinAnimationFinished() const;
 
     [[nodiscard]] glm::vec2 GetBodySize() const;
     [[nodiscard]] glm::vec2 GetHeadSize() const;

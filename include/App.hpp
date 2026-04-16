@@ -14,6 +14,8 @@
 #include "Util/Keycode.hpp"
 #include "Util/Renderer.hpp"
 #include "Util/Text.hpp"
+#include "Util/BGM.hpp"
+#include "Util/SFX.hpp"
 
 class OverlayText : public Util::GameObject {
 public:
@@ -149,6 +151,7 @@ private:
     );
     void UpdateGreenSwitch();
     void UpdateGreenPlatform();
+    void UpdateGreenPlatform2();
     void UpdateCubePhysics();
     void ResolveCubeHorizontalCollisions(
         const SolidRect& oldCube,
@@ -364,11 +367,16 @@ private:
     // Scene objects
     // ------------------------------------------------------------------------
     std::shared_ptr<BackgroundImage> m_Background;
+    std::shared_ptr<Util::BGM> m_BackgroundMusic;
+    std::shared_ptr<Util::SFX> m_DeathSound;
+    std::shared_ptr<Util::SFX> m_FinishSound;
     std::shared_ptr<HeadBodyCharacter> m_Fireboy;
     std::shared_ptr<HeadBodyCharacter> m_Watergirl;
     std::shared_ptr<Character> m_GreenPlatform;
+    std::shared_ptr<Character> m_GreenPlatform2;
     std::shared_ptr<Character> m_GreenButton;
     std::shared_ptr<Character> m_GreenButtonAfter;
+    std::shared_ptr<Character> m_GreenButtonAfter2;
     std::shared_ptr<Character> m_GreenSwitch;
     std::shared_ptr<Character> m_Cube;
     ExitDoor m_FireboyDoor;
@@ -389,8 +397,10 @@ private:
     glm::vec2 m_WatergirlSpawnPosition = {0.0f, 0.0f};
     glm::vec2 m_CubeSpawnPosition = {0.0f, 0.0f};
     glm::vec2 m_GreenButtonBasePosition = {0.0f, 0.0f};
-    glm::vec2 m_GreenButtonAfterBasePosition = {0.0f, 0.0f};
-    glm::vec2 m_GreenButtonAfterBaseSize = {0.0f, 0.0f};
+    glm::vec2 m_GreenButtonAfterBasePosition = { 0.0f, 0.0f };
+    glm::vec2 m_GreenButtonAfterBasePosition2 = { 0.0f, 0.0f };
+    glm::vec2 m_GreenButtonAfterBaseSize = { 0.0f, 0.0f };
+    glm::vec2 m_GreenButtonAfterBaseSize2 = { 0.0f, 0.0f };
     glm::vec2 m_FireboyDeathStartScale = {1.0f, 1.0f};
     glm::vec2 m_WatergirlDeathStartScale = {1.0f, 1.0f};
     bool m_FireboyOnGround = false;
@@ -459,14 +469,20 @@ private:
     SolidRect m_GreenPlatformRestRect;
     SolidRect m_GreenPlatformPressedRect;
     SolidRect m_GreenPlatformCurrentRect;
+    SolidRect m_GreenPlatformRestRect2;
+    SolidRect m_GreenPlatformPressedRect2;
+    SolidRect m_GreenPlatformCurrentRect2;
     SolidRect m_GreenButtonHitbox;
     SolidRect m_GreenButtonAfterHitbox;
+    SolidRect m_GreenButtonAfterHitbox2;
     SolidRect m_GreenSwitchHitbox;
     SolidRect m_CubeRect;
     SolidRect m_CubeSpawnRect;
     std::size_t m_GreenPlatformBlockIndex = 0;
+    std::size_t m_GreenPlatformBlockIndex2 = 0;
     std::size_t m_CubeBlockIndex = 0;
     bool m_HasGreenPlatformBlock = false;
+    bool m_HasGreenPlatformBlock2 = false;
     bool m_HasCubeBlock = false;
     bool m_GreenButtonPressed = false;
     bool m_GreenSwitchOn = false;
@@ -484,6 +500,7 @@ private:
     float m_GreenButtonPressDepth = 7.5f;
     float m_GreenButtonAnimSpeed = 0.10f;
     float m_GreenButtonAfterPressVisual = 0.0f;
+    float m_GreenButtonAfterPressVisual2 = 0.0f;
     VictoryPhase m_VictoryPhase = VictoryPhase::None;
     float m_VictoryTimer = 0.0f;
     float m_VictoryRunDuration = 0.30f;
@@ -510,6 +527,12 @@ private:
     std::shared_ptr<OverlayText> m_VictoryRedDiamondText;
     std::shared_ptr<OverlayText> m_VictoryRankText;
     VictoryOverlayButton m_VictoryContinueButton;
+
+    std::unique_ptr<Util::BGM> m_GameplayMusic;
+    std::unique_ptr<Util::BGM> m_DeathMusic;
+    std::unique_ptr<Util::BGM> m_FinishMusic;
+    bool m_DeathMusicPlayed = false;
+    bool m_FinishMusicPlayed = false;
 };
 
 #endif // APP_HPP

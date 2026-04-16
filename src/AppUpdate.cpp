@@ -12,15 +12,15 @@
 #include <unordered_map>
 
 namespace {
-// These constants tune how animation state is inferred from physics. They are
-// intentionally separate from movement speed so visual state changes remain
-// stable even if gameplay numbers are retuned.
-std::unordered_map<HeadBodyCharacter*, glm::vec2> s_LastPos;
-constexpr float IDLE_EPSILON = 0.5f;
-constexpr float AIR_STATE_EPSILON = 0.15f;
-constexpr float AIR_RUN_EPSILON = 0.25f;
-constexpr float MAX_AIR_HEAD_ROTATION = 0.45f;
-constexpr float FIXED_TIME_STEP = 1.0f / 60.0f;
+    // These constants tune how animation state is inferred from physics. They are
+    // intentionally separate from movement speed so visual state changes remain
+    // stable even if gameplay numbers are retuned.
+    std::unordered_map<HeadBodyCharacter*, glm::vec2> s_LastPos;
+    constexpr float IDLE_EPSILON = 0.5f;
+    constexpr float AIR_STATE_EPSILON = 0.15f;
+    constexpr float AIR_RUN_EPSILON = 0.25f;
+    constexpr float MAX_AIR_HEAD_ROTATION = 0.45f;
+    constexpr float FIXED_TIME_STEP = 1.0f / 60.0f;
 }
 
 void App::Update() {
@@ -53,6 +53,7 @@ void App::Update() {
 
         UpdateGreenSwitch();
         UpdateGreenPlatform();
+        UpdateGreenPlatform2();
         CheckHazards();
         UpdateDeathSequence();
 
@@ -68,10 +69,12 @@ void App::Update() {
         if (m_VictoryPhase == VictoryPhase::None) {
             UpdateCharacterMotionState(m_Fireboy, m_FireboyVelocity, m_FireboyOnGround);
             UpdateCharacterMotionState(m_Watergirl, m_WatergirlVelocity, m_WatergirlOnGround);
-        } else {
+        }
+        else {
             UpdateVictorySequence();
         }
-    } else {
+    }
+    else {
         UpdateExitDoors();
         UpdateVictorySequence();
     }
@@ -140,9 +143,10 @@ void App::HandleCharacterInput(
     }
 
     if (inputDir < 0.0f) {
-        character->SetScale({-1.0f, 1.0f});
-    } else if (inputDir > 0.0f) {
-        character->SetScale({1.0f, 1.0f});
+        character->SetScale({ -1.0f, 1.0f });
+    }
+    else if (inputDir > 0.0f) {
+        character->SetScale({ 1.0f, 1.0f });
     }
 
     // Liquids do not use a separate movement mode. Instead we scale the normal
@@ -161,12 +165,15 @@ void App::HandleCharacterInput(
         const float targetSpeed = inputDir * m_MoveSpeed * liquidSpeedScale;
         if (velocity.x < targetSpeed) {
             velocity.x = std::min(targetSpeed, velocity.x + acceleration);
-        } else if (velocity.x > targetSpeed) {
+        }
+        else if (velocity.x > targetSpeed) {
             velocity.x = std::max(targetSpeed, velocity.x - acceleration);
         }
-    } else if (velocity.x > 0.0f) {
+    }
+    else if (velocity.x > 0.0f) {
         velocity.x = std::max(0.0f, velocity.x - deceleration);
-    } else if (velocity.x < 0.0f) {
+    }
+    else if (velocity.x < 0.0f) {
         velocity.x = std::min(0.0f, velocity.x + deceleration);
     }
 
@@ -188,7 +195,8 @@ void App::HandleCharacterInput(
 
         if (ceilingCarrySpeed > 0.0f) {
             velocity.x = std::max(velocity.x, minCarryAbs);
-        } else {
+        }
+        else {
             velocity.x = std::min(velocity.x, -minCarryAbs);
         }
 
@@ -230,7 +238,8 @@ void App::HandleCharacterInput(
                     0.0f,
                     jumpLaunchMax
                 );
-            } else {
+            }
+            else {
                 velocity.x = std::clamp(
                     std::min(velocity.x, -jumpLaunchMin),
                     -jumpLaunchMax,
@@ -328,14 +337,18 @@ void App::UpdateCharacterMotionState(
     if (!onGround) {
         if (std::abs(velocity.x) > AIR_RUN_EPSILON) {
             character->SetMotionState(HeadBodyCharacter::MotionState::Move);
-        } else if (velocity.y > AIR_STATE_EPSILON) {
+        }
+        else if (velocity.y > AIR_STATE_EPSILON) {
             character->SetMotionState(HeadBodyCharacter::MotionState::Jump);
-        } else {
+        }
+        else {
             character->SetMotionState(HeadBodyCharacter::MotionState::Fall);
         }
-    } else if (moved < IDLE_EPSILON) {
+    }
+    else if (moved < IDLE_EPSILON) {
         character->SetMotionState(HeadBodyCharacter::MotionState::Idle);
-    } else {
+    }
+    else {
         character->SetMotionState(HeadBodyCharacter::MotionState::Move);
     }
 
@@ -353,7 +366,8 @@ void App::UpdateCharacterMotionState(
             MAX_AIR_HEAD_ROTATION
         );
         character->SetHeadRotation(headAngle);
-    } else {
+    }
+    else {
         character->SetHeadRotation(0.0f);
     }
 
@@ -372,7 +386,8 @@ void App::UpdateExitDoors() {
             static_cast<float>(door.openingImagePaths.size()) * m_DoorFrameDuration;
         if (door.occupied) {
             door.openProgress = std::min(maxProgress, door.openProgress + FIXED_TIME_STEP);
-        } else {
+        }
+        else {
             door.openProgress = std::max(0.0f, door.openProgress - FIXED_TIME_STEP);
         }
 
@@ -387,12 +402,13 @@ void App::UpdateExitDoors() {
             static_cast<int>(door.openingImagePaths.size()) - 1
         );
         door.sprite->SetImage(door.openingImagePaths[frameIndex]);
-    };
+        };
 
     if (m_VictoryPhase == VictoryPhase::None) {
         m_FireboyDoor.occupied = IsCharacterAtDoor(m_Fireboy, m_FireboyCollision, m_FireboyDoor);
         m_WatergirlDoor.occupied = IsCharacterAtDoor(m_Watergirl, m_WatergirlCollision, m_WatergirlDoor);
-    } else {
+    }
+    else {
         m_FireboyDoor.occupied = true;
         m_WatergirlDoor.occupied = true;
     }
@@ -422,8 +438,13 @@ void App::UpdateExitDoors() {
                 Util::Time::GetElapsedTimeMs() - m_LevelStartTimeMs
             );
         }
-        m_FireboyVelocity = {0.0f, 0.0f};
-        m_WatergirlVelocity = {0.0f, 0.0f};
+        m_FireboyVelocity = { 0.0f, 0.0f };
+        m_WatergirlVelocity = { 0.0f, 0.0f };
+
+        if (!m_FinishMusicPlayed && m_FinishMusic) {
+            m_FinishMusic->Play(0);
+            m_FinishMusicPlayed = true;
+        }
     }
 }
 
@@ -438,40 +459,41 @@ void App::UpdateVictorySequence() {
 
         character->SetHeadRotation(0.0f);
         character->SetAirborneRunHeadOffsetEnabled(false);
-    };
+        };
 
     if (m_VictoryPhase == VictoryPhase::RunIntoDoor) {
         m_VictoryTimer += FIXED_TIME_STEP;
 
         auto runIntoDoor = [&](const std::shared_ptr<HeadBodyCharacter>& character,
-                               const ExitDoor& door,
-                               glm::vec2& velocity,
-                               bool& onGround) {
-            if (!character || !door.sprite) {
-                return true;
-            }
+            const ExitDoor& door,
+            glm::vec2& velocity,
+            bool& onGround) {
+                if (!character || !door.sprite) {
+                    return true;
+                }
 
-            velocity = {0.0f, 0.0f};
-            onGround = true;
-            zeroAirVisuals(character);
+                velocity = { 0.0f, 0.0f };
+                onGround = true;
+                zeroAirVisuals(character);
 
-            glm::vec2 pos = character->GetPosition();
-            const float deltaX = door.sprite->GetPosition().x - pos.x;
-            const bool centered = std::abs(deltaX) <= m_VictoryDoorCenterTolerance;
+                glm::vec2 pos = character->GetPosition();
+                const float deltaX = door.sprite->GetPosition().x - pos.x;
+                const bool centered = std::abs(deltaX) <= m_VictoryDoorCenterTolerance;
 
-            if (!centered) {
-                const float moveX = std::clamp(deltaX, -m_VictoryAlignSpeed, m_VictoryAlignSpeed);
-                pos.x += moveX;
-                character->SetScale({moveX < 0.0f ? -1.0f : 1.0f, 1.0f});
-                character->SetMotionState(HeadBodyCharacter::MotionState::Move);
-            } else {
-                pos.x = door.sprite->GetPosition().x;
-                character->SetMotionState(HeadBodyCharacter::MotionState::Idle);
-            }
+                if (!centered) {
+                    const float moveX = std::clamp(deltaX, -m_VictoryAlignSpeed, m_VictoryAlignSpeed);
+                    pos.x += moveX;
+                    character->SetScale({ moveX < 0.0f ? -1.0f : 1.0f, 1.0f });
+                    character->SetMotionState(HeadBodyCharacter::MotionState::Move);
+                }
+                else {
+                    pos.x = door.sprite->GetPosition().x;
+                    character->SetMotionState(HeadBodyCharacter::MotionState::Idle);
+                }
 
-            character->SetPosition(pos);
-            return centered;
-        };
+                character->SetPosition(pos);
+                return centered;
+            };
 
         const bool fireboyCentered = runIntoDoor(
             m_Fireboy,
@@ -491,8 +513,8 @@ void App::UpdateVictorySequence() {
             watergirlCentered) {
             m_VictoryPhase = VictoryPhase::Celebrate;
             m_VictoryTimer = 0.0f;
-            m_FireboyVelocity = {0.0f, 0.0f};
-            m_WatergirlVelocity = {0.0f, 0.0f};
+            m_FireboyVelocity = { 0.0f, 0.0f };
+            m_WatergirlVelocity = { 0.0f, 0.0f };
             zeroAirVisuals(m_Fireboy);
             zeroAirVisuals(m_Watergirl);
             if (m_Fireboy) {
@@ -507,8 +529,8 @@ void App::UpdateVictorySequence() {
 
     if (m_VictoryPhase == VictoryPhase::Celebrate) {
         m_VictoryTimer += FIXED_TIME_STEP;
-        m_FireboyVelocity = {0.0f, 0.0f};
-        m_WatergirlVelocity = {0.0f, 0.0f};
+        m_FireboyVelocity = { 0.0f, 0.0f };
+        m_WatergirlVelocity = { 0.0f, 0.0f };
         zeroAirVisuals(m_Fireboy);
         zeroAirVisuals(m_Watergirl);
         if (m_Fireboy) {
@@ -522,9 +544,9 @@ void App::UpdateVictorySequence() {
 
 bool App::AreBothCharactersDead() const {
     return m_Fireboy &&
-           m_Watergirl &&
-           m_Fireboy->GetLifeState() == HeadBodyCharacter::LifeState::Dead &&
-           m_Watergirl->GetLifeState() == HeadBodyCharacter::LifeState::Dead;
+        m_Watergirl &&
+        m_Fireboy->GetLifeState() == HeadBodyCharacter::LifeState::Dead &&
+        m_Watergirl->GetLifeState() == HeadBodyCharacter::LifeState::Dead;
 }
 
 bool App::IsFailOverlayVisible() const {
@@ -555,8 +577,8 @@ App::FailOverlayAction App::GetFailOverlayAction() const {
 
     const glm::vec2 cursor = Util::Input::GetCursorPosition();
     const auto cursorInside = [&](const SolidRect& rect) {
-        return CheckAABB(cursor, {1.0f, 1.0f}, rect.center, rect.size);
-    };
+        return CheckAABB(cursor, { 1.0f, 1.0f }, rect.center, rect.size);
+        };
 
     if (cursorInside(m_FailRestartButton.rect)) {
         return FailOverlayAction::Restart;
@@ -598,10 +620,10 @@ void App::UpdateFailOverlayVisuals() {
         }
 
         const bool hovered = m_FailOverlayVisible &&
-            CheckAABB(cursor, {1.0f, 1.0f}, button.rect.center, button.rect.size);
+            CheckAABB(cursor, { 1.0f, 1.0f }, button.rect.center, button.rect.size);
 
         button.labelObject->SetColor(hovered ? hoveredColor : normalColor);
-    };
+        };
 
     updateButtonText(m_FailRestartButton);
     updateButtonText(m_FailHomeButton);
@@ -622,7 +644,8 @@ void App::UpdateFailOverlay() {
     const FailOverlayAction action = GetFailOverlayAction();
     if (Util::Input::IsKeyDown(Util::Keycode::MOUSE_LB)) {
         m_FailOverlayMouseLatch = true;
-    } else {
+    }
+    else {
         m_FailOverlayMouseLatch = false;
     }
 
@@ -664,11 +687,11 @@ void App::UpdateVictoryOverlayVisuals() {
 
         std::ostringstream stream;
         stream << std::setfill('0')
-               << std::setw(2) << minutes
-               << ":"
-               << std::setw(2) << seconds;
+            << std::setw(2) << minutes
+            << ":"
+            << std::setw(2) << seconds;
         return stream.str();
-    };
+        };
 
     // The original games clearly rank faster / more complete runs higher, but
     // exact public thresholds were not available in our source pass. This is
@@ -684,9 +707,11 @@ void App::UpdateVictoryOverlayVisuals() {
     std::string rank = "C";
     if (collectedRatio >= 0.999f && elapsedSeconds <= 65.0f) {
         rank = "S";
-    } else if (collectedRatio >= 0.85f && elapsedSeconds <= 95.0f) {
+    }
+    else if (collectedRatio >= 0.85f && elapsedSeconds <= 95.0f) {
         rank = "A";
-    } else if (collectedRatio >= 0.60f || elapsedSeconds <= 140.0f) {
+    }
+    else if (collectedRatio >= 0.60f || elapsedSeconds <= 140.0f) {
         rank = "B";
     }
 
@@ -716,14 +741,14 @@ void App::UpdateVictoryOverlayVisuals() {
         const glm::vec2 cursor = Util::Input::GetCursorPosition();
         const bool hovered = CheckAABB(
             cursor,
-            {1.0f, 1.0f},
+            { 1.0f, 1.0f },
             m_VictoryContinueButton.rect.center,
             m_VictoryContinueButton.rect.size
         );
         m_VictoryContinueButton.labelObject->SetColor(
             hovered
-                ? Util::Color(255, 220, 140, 255)
-                : Util::Color(255, 255, 255, 255)
+            ? Util::Color(255, 220, 140, 255)
+            : Util::Color(255, 255, 255, 255)
         );
     }
 }
@@ -742,12 +767,23 @@ void App::CheckHazards() {
         }
 
         return false;
-    };
+        };
+
+    auto playDeathSfx = [&]() {
+        if (m_DeathSound) {
+            m_DeathSound->Play(0);
+        }
+        else if (m_DeathMusic) {
+            m_DeathMusic->Play(0);
+        }
+        };
 
     for (const auto& hazard : m_Hazards) {
-        if (isFatal(hazard.type, true) &&
+        if (m_Fireboy &&
+            m_Fireboy->GetLifeState() == HeadBodyCharacter::LifeState::Alive &&
+            isFatal(hazard.type, true) &&
             CharacterTouchesHazard(m_Fireboy, m_FireboyCollision, hazard)) {
-            m_FireboyVelocity = {0.0f, 0.0f};
+            m_FireboyVelocity = { 0.0f, 0.0f };
             m_FireboyOnGround = false;
             m_Fireboy->SetAirborneRunHeadOffsetEnabled(false);
             m_Fireboy->SetHeadRotation(0.0f);
@@ -755,11 +791,14 @@ void App::CheckHazards() {
             m_FireboyDeathStartScale = m_Fireboy->GetTransform().scale;
             m_FireboyDeathTimer = 0.0f;
             m_Fireboy->SetLifeState(HeadBodyCharacter::LifeState::Dying);
+            playDeathSfx();
         }
 
-        if (isFatal(hazard.type, false) &&
+        if (m_Watergirl &&
+            m_Watergirl->GetLifeState() == HeadBodyCharacter::LifeState::Alive &&
+            isFatal(hazard.type, false) &&
             CharacterTouchesHazard(m_Watergirl, m_WatergirlCollision, hazard)) {
-            m_WatergirlVelocity = {0.0f, 0.0f};
+            m_WatergirlVelocity = { 0.0f, 0.0f };
             m_WatergirlOnGround = false;
             m_Watergirl->SetAirborneRunHeadOffsetEnabled(false);
             m_Watergirl->SetHeadRotation(0.0f);
@@ -767,6 +806,7 @@ void App::CheckHazards() {
             m_WatergirlDeathStartScale = m_Watergirl->GetTransform().scale;
             m_WatergirlDeathTimer = 0.0f;
             m_Watergirl->SetLifeState(HeadBodyCharacter::LifeState::Dying);
+            playDeathSfx();
         }
     }
 }
@@ -775,35 +815,35 @@ void App::UpdateDeathSequence() {
     // Death is a short sink/shrink transition before the character becomes
     // fully non-interactive and invisible.
     auto updateCharacterDeath = [&](const std::shared_ptr<HeadBodyCharacter>& character,
-                                    float& deathTimer,
-                                    const glm::vec2& deathStartScale,
-                                    glm::vec2& velocity) {
-        if (!character || character->GetLifeState() != HeadBodyCharacter::LifeState::Dying) {
-            return;
-        }
+        float& deathTimer,
+        const glm::vec2& deathStartScale,
+        glm::vec2& velocity) {
+            if (!character || character->GetLifeState() != HeadBodyCharacter::LifeState::Dying) {
+                return;
+            }
 
-        deathTimer = std::min(m_DeathAnimationDuration, deathTimer + FIXED_TIME_STEP);
-        const float t = std::clamp(deathTimer / m_DeathAnimationDuration, 0.0f, 1.0f);
-        const float scaleMagnitude = 1.0f + (m_DeathEndScale - 1.0f) * t;
-        const float scaleXSign = deathStartScale.x < 0.0f ? -1.0f : 1.0f;
-        const float scaleYSign = deathStartScale.y < 0.0f ? -1.0f : 1.0f;
+            deathTimer = std::min(m_DeathAnimationDuration, deathTimer + FIXED_TIME_STEP);
+            const float t = std::clamp(deathTimer / m_DeathAnimationDuration, 0.0f, 1.0f);
+            const float scaleMagnitude = 1.0f + (m_DeathEndScale - 1.0f) * t;
+            const float scaleXSign = deathStartScale.x < 0.0f ? -1.0f : 1.0f;
+            const float scaleYSign = deathStartScale.y < 0.0f ? -1.0f : 1.0f;
 
-        character->SetScale({
-            scaleXSign * scaleMagnitude,
-            scaleYSign * scaleMagnitude,
-        });
-        character->SetHeadRotation(0.0f);
+            character->SetScale({
+                scaleXSign * scaleMagnitude,
+                scaleYSign * scaleMagnitude,
+                });
+            character->SetHeadRotation(0.0f);
 
-        glm::vec2 pos = character->GetPosition();
-        pos.y -= m_DeathSinkSpeed * (0.85f + 0.15f * t);
-        character->SetPosition(pos);
+            glm::vec2 pos = character->GetPosition();
+            pos.y -= m_DeathSinkSpeed * (0.85f + 0.15f * t);
+            character->SetPosition(pos);
 
-        velocity = {0.0f, 0.0f};
+            velocity = { 0.0f, 0.0f };
 
-        if (t >= 1.0f) {
-            character->SetLifeState(HeadBodyCharacter::LifeState::Dead);
-        }
-    };
+            if (t >= 1.0f) {
+                character->SetLifeState(HeadBodyCharacter::LifeState::Dead);
+            }
+        };
 
     updateCharacterDeath(m_Fireboy, m_FireboyDeathTimer, m_FireboyDeathStartScale, m_FireboyVelocity);
     updateCharacterDeath(m_Watergirl, m_WatergirlDeathTimer, m_WatergirlDeathStartScale, m_WatergirlVelocity);
@@ -837,27 +877,27 @@ void App::CheckDiamondCollection() {
     }
 
     auto touchesDiamond = [&](const std::shared_ptr<HeadBodyCharacter>& character,
-                              const CharacterCollisionProfile& profile,
-                              const CollectibleDiamond& diamond) {
-        if (!character || !character->IsAlive()) {
-            return false;
-        }
+        const CharacterCollisionProfile& profile,
+        const CollectibleDiamond& diamond) {
+            if (!character || !character->IsAlive()) {
+                return false;
+            }
 
-        glm::vec2 bodyCenter = {0.0f, 0.0f};
-        glm::vec2 bodySize = {0.0f, 0.0f};
-        glm::vec2 headCenter = {0.0f, 0.0f};
-        glm::vec2 headSize = {0.0f, 0.0f};
-        GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
-        GetCharacterHeadBox(character->GetPosition(), profile, headCenter, headSize);
+            glm::vec2 bodyCenter = { 0.0f, 0.0f };
+            glm::vec2 bodySize = { 0.0f, 0.0f };
+            glm::vec2 headCenter = { 0.0f, 0.0f };
+            glm::vec2 headSize = { 0.0f, 0.0f };
+            GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
+            GetCharacterHeadBox(character->GetPosition(), profile, headCenter, headSize);
 
-        const glm::vec2 diamondHitboxSize = {
-            std::max(1.0f, diamond.sprite->GetSize().x * m_DiamondHitboxScale.x),
-            std::max(1.0f, diamond.sprite->GetSize().y * m_DiamondHitboxScale.y),
+            const glm::vec2 diamondHitboxSize = {
+                std::max(1.0f, diamond.sprite->GetSize().x * m_DiamondHitboxScale.x),
+                std::max(1.0f, diamond.sprite->GetSize().y * m_DiamondHitboxScale.y),
+            };
+
+            return CheckAABB(bodyCenter, bodySize, diamond.sprite->GetPosition(), diamondHitboxSize) ||
+                CheckAABB(headCenter, headSize, diamond.sprite->GetPosition(), diamondHitboxSize);
         };
-
-        return CheckAABB(bodyCenter, bodySize, diamond.sprite->GetPosition(), diamondHitboxSize) ||
-               CheckAABB(headCenter, headSize, diamond.sprite->GetPosition(), diamondHitboxSize);
-    };
 
     auto collectDiamond = [&](CollectibleDiamond& diamond) {
         diamond.collected = true;
@@ -874,7 +914,7 @@ void App::CheckDiamondCollection() {
             ++m_GreenDiamondsCollected;
             break;
         }
-    };
+        };
 
     for (auto& diamond : m_Diamonds) {
         if (!diamond.sprite || diamond.collected || !diamond.sprite->GetVisibility()) {
@@ -915,59 +955,59 @@ void App::UpdateCubePhysics() {
         float pushIntent = 0.0f;
 
         auto tryCharacterPush = [&](const std::shared_ptr<HeadBodyCharacter>& character,
-                                    const CharacterCollisionProfile& profile,
-                                    bool onGround,
-                                    Util::Keycode leftKey,
-                                    Util::Keycode rightKey) {
-            if (!character || !onGround) {
-                return;
-            }
+            const CharacterCollisionProfile& profile,
+            bool onGround,
+            Util::Keycode leftKey,
+            Util::Keycode rightKey) {
+                if (!character || !onGround) {
+                    return;
+                }
 
-            float inputDir = 0.0f;
-            if (Util::Input::IsKeyPressed(leftKey)) {
-                inputDir -= 1.0f;
-            }
-            if (Util::Input::IsKeyPressed(rightKey)) {
-                inputDir += 1.0f;
-            }
-            if (inputDir == 0.0f) {
-                return;
-            }
+                float inputDir = 0.0f;
+                if (Util::Input::IsKeyPressed(leftKey)) {
+                    inputDir -= 1.0f;
+                }
+                if (Util::Input::IsKeyPressed(rightKey)) {
+                    inputDir += 1.0f;
+                }
+                if (inputDir == 0.0f) {
+                    return;
+                }
 
-            glm::vec2 bodyCenter = {0.0f, 0.0f};
-            glm::vec2 bodySize = {0.0f, 0.0f};
-            GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
+                glm::vec2 bodyCenter = { 0.0f, 0.0f };
+                glm::vec2 bodySize = { 0.0f, 0.0f };
+                GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
 
-            const float bodyLeft = bodyCenter.x - bodySize.x * 0.5f;
-            const float bodyRight = bodyCenter.x + bodySize.x * 0.5f;
-            const float bodyBottom = bodyCenter.y - bodySize.y * 0.5f;
-            const float bodyTop = bodyCenter.y + bodySize.y * 0.5f;
-            const float cubeLeft = oldCube.center.x - oldCube.size.x * 0.5f;
-            const float cubeRight = oldCube.center.x + oldCube.size.x * 0.5f;
-            const float cubeBottom = oldCube.center.y - oldCube.size.y * 0.5f;
-            const float cubeTop = oldCube.center.y + oldCube.size.y * 0.5f;
+                const float bodyLeft = bodyCenter.x - bodySize.x * 0.5f;
+                const float bodyRight = bodyCenter.x + bodySize.x * 0.5f;
+                const float bodyBottom = bodyCenter.y - bodySize.y * 0.5f;
+                const float bodyTop = bodyCenter.y + bodySize.y * 0.5f;
+                const float cubeLeft = oldCube.center.x - oldCube.size.x * 0.5f;
+                const float cubeRight = oldCube.center.x + oldCube.size.x * 0.5f;
+                const float cubeBottom = oldCube.center.y - oldCube.size.y * 0.5f;
+                const float cubeTop = oldCube.center.y + oldCube.size.y * 0.5f;
 
-            const bool verticalOverlap =
-                bodyTop > cubeBottom + 2.0f &&
-                bodyBottom < cubeTop - 2.0f;
+                const bool verticalOverlap =
+                    bodyTop > cubeBottom + 2.0f &&
+                    bodyBottom < cubeTop - 2.0f;
 
-            if (!verticalOverlap) {
-                return;
-            }
+                if (!verticalOverlap) {
+                    return;
+                }
 
-            const float pushTolerance = 10.0f;
-            if (inputDir > 0.0f &&
-                bodyRight >= cubeLeft - pushTolerance &&
-                bodyRight <= cubeLeft + pushTolerance) {
-                pushIntent += 1.0f;
-            }
+                const float pushTolerance = 10.0f;
+                if (inputDir > 0.0f &&
+                    bodyRight >= cubeLeft - pushTolerance &&
+                    bodyRight <= cubeLeft + pushTolerance) {
+                    pushIntent += 1.0f;
+                }
 
-            if (inputDir < 0.0f &&
-                bodyLeft <= cubeRight + pushTolerance &&
-                bodyLeft >= cubeRight - pushTolerance) {
-                pushIntent -= 1.0f;
-            }
-        };
+                if (inputDir < 0.0f &&
+                    bodyLeft <= cubeRight + pushTolerance &&
+                    bodyLeft >= cubeRight - pushTolerance) {
+                    pushIntent -= 1.0f;
+                }
+            };
 
         tryCharacterPush(
             m_Fireboy,
@@ -985,7 +1025,7 @@ void App::UpdateCubePhysics() {
         );
 
         return std::clamp(pushIntent, -2.0f, 2.0f);
-    };
+        };
 
     const float pushIntent = getPushIntent();
     const float targetSpeed = pushIntent * m_CubePushSpeed;
@@ -993,12 +1033,15 @@ void App::UpdateCubePhysics() {
     if (pushIntent != 0.0f) {
         if (m_CubeVelocity.x < targetSpeed) {
             m_CubeVelocity.x = std::min(targetSpeed, m_CubeVelocity.x + pushAcceleration);
-        } else if (m_CubeVelocity.x > targetSpeed) {
+        }
+        else if (m_CubeVelocity.x > targetSpeed) {
             m_CubeVelocity.x = std::max(targetSpeed, m_CubeVelocity.x - pushAcceleration);
         }
-    } else if (m_CubeVelocity.x > 0.0f) {
+    }
+    else if (m_CubeVelocity.x > 0.0f) {
         m_CubeVelocity.x = std::max(0.0f, m_CubeVelocity.x - m_CubeDeceleration);
-    } else if (m_CubeVelocity.x < 0.0f) {
+    }
+    else if (m_CubeVelocity.x < 0.0f) {
         m_CubeVelocity.x = std::min(0.0f, m_CubeVelocity.x + m_CubeDeceleration);
     }
 
@@ -1054,10 +1097,11 @@ void App::UpdateCubePhysics() {
             newBottom <= blockTop + m_GroundSnapTolerance) {
             bestGroundY = std::max(bestGroundY, blockTop);
             foundGround = true;
-        } else if (block.blockBottom &&
-                   m_CubeVelocity.y > 0.0f &&
-                   oldTop <= blockBottom + m_GroundSnapTolerance &&
-                   newTop >= blockBottom - m_GroundSnapTolerance) {
+        }
+        else if (block.blockBottom &&
+            m_CubeVelocity.y > 0.0f &&
+            oldTop <= blockBottom + m_GroundSnapTolerance &&
+            newTop >= blockBottom - m_GroundSnapTolerance) {
             m_CubeRect.center.y = blockBottom - m_CubeRect.size.y * 0.5f;
             m_CubeVelocity.y = 0.0f;
             hitCeiling = true;
@@ -1065,11 +1109,11 @@ void App::UpdateCubePhysics() {
     }
 
     if (!hitCeiling && ResolveCubeSlopeGrounding(
-            cubeBeforeVertical,
-            m_CubeRect,
-            m_CubeVelocity,
-            m_CubeOnGround
-        )) {
+        cubeBeforeVertical,
+        m_CubeRect,
+        m_CubeVelocity,
+        m_CubeOnGround
+    )) {
         const float slopeGroundY = m_CubeRect.center.y - m_CubeRect.size.y * 0.5f;
         if (!foundGround || slopeGroundY > bestGroundY) {
             bestGroundY = slopeGroundY;
@@ -1112,7 +1156,7 @@ void App::ResolveCubeHorizontalCollisions(
 
     auto cubeCollides = [&](const SolidRect& candidate, const SolidRect& block) {
         return CheckAABB(candidate.center, candidate.size, block.center, block.size);
-    };
+        };
 
     for (std::size_t i = 0; i < m_SolidBlocks.size(); ++i) {
         if (i == m_CubeBlockIndex) {
@@ -1165,7 +1209,7 @@ void App::ResolveCubeHorizontalCollisions(
 
             newCube.center.y = raisedY;
             return true;
-        };
+            };
 
         auto canStepToNearbyGround = [&]() {
             SolidRect probeCube = newCube;
@@ -1173,10 +1217,10 @@ void App::ResolveCubeHorizontalCollisions(
 
             float targetGroundY = 0.0f;
             if (!FindNearbyCubeGroundY(
-                    probeCube,
-                    m_StepUpHeight + m_GroundSnapTolerance,
-                    targetGroundY
-                )) {
+                probeCube,
+                m_StepUpHeight + m_GroundSnapTolerance,
+                targetGroundY
+            )) {
                 return false;
             }
 
@@ -1212,14 +1256,15 @@ void App::ResolveCubeHorizontalCollisions(
 
             newCube.center.y = candidate.center.y;
             return true;
-        };
+            };
 
         if (velocity.x > 0.0f && oldRight <= blockLeft && newRight >= blockLeft) {
             if (!canStepUp(blockTop) && !canStepToNearbyGround()) {
                 newCube.center.x = blockLeft - newCube.size.x * 0.5f;
                 velocity.x = 0.0f;
             }
-        } else if (velocity.x < 0.0f && oldLeft >= blockRight && newLeft <= blockRight) {
+        }
+        else if (velocity.x < 0.0f && oldLeft >= blockRight && newLeft <= blockRight) {
             if (!canStepUp(blockTop) && !canStepToNearbyGround()) {
                 newCube.center.x = blockRight + newCube.size.x * 0.5f;
                 velocity.x = 0.0f;
@@ -1416,52 +1461,70 @@ bool App::FindNearbyCubeGroundY(
 }
 
 void App::UpdateGreenPlatform() {
-    // The green platform is physically moved by updating its SolidRect inside
-    // m_SolidBlocks, then carrying any character/cube standing on it.
+    // Old platform: controlled by switch only.
     if (!m_GreenPlatform || !m_HasGreenPlatformBlock || m_GreenPlatformBlockIndex >= m_SolidBlocks.size()) {
         return;
     }
 
     const auto animateButtonPress = [&](const std::shared_ptr<Character>& button,
-                                        bool pressed) {
-        if (!button) {
-            return;
-        }
+        bool pressed,
+        const glm::vec2& basePosition,
+        const glm::vec2& baseSize,
+        float& pressVisual) {
+            if (!button) {
+                return;
+            }
 
-        const float targetVisual = pressed ? 1.0f : 0.0f;
-        const float deltaVisual = targetVisual - m_GreenButtonAfterPressVisual;
-        const float stepVisual = std::abs(deltaVisual) <= m_GreenButtonAnimSpeed
-            ? deltaVisual
-            : std::copysign(m_GreenButtonAnimSpeed, deltaVisual);
-        m_GreenButtonAfterPressVisual = std::clamp(
-            m_GreenButtonAfterPressVisual + stepVisual,
-            0.0f,
-            1.0f
-        );
+            const float targetVisual = pressed ? 1.0f : 0.0f;
+            const float deltaVisual = targetVisual - pressVisual;
+            const float stepVisual = std::abs(deltaVisual) <= m_GreenButtonAnimSpeed
+                ? deltaVisual
+                : std::copysign(m_GreenButtonAnimSpeed, deltaVisual);
+            pressVisual = std::clamp(pressVisual + stepVisual, 0.0f, 1.0f);
 
-        const float collapsedHeight = std::max(0.1f, m_GreenButtonAfterBaseSize.y * 0.01f);
-        const float currentHeight =
-            m_GreenButtonAfterBaseSize.y +
-            (collapsedHeight - m_GreenButtonAfterBaseSize.y) * m_GreenButtonAfterPressVisual;
-        const float baseBottomY =
-            m_GreenButtonAfterBasePosition.y - m_GreenButtonAfterBaseSize.y * 0.5f;
-        const float buriedBottomY =
-            baseBottomY - m_GreenButtonPressDepth * m_GreenButtonAfterPressVisual;
+            const float collapsedHeight = std::max(0.1f, baseSize.y * 0.01f);
+            const float currentHeight = baseSize.y + (collapsedHeight - baseSize.y) * pressVisual;
+            const float baseBottomY = basePosition.y - baseSize.y * 0.5f;
+            const float buriedBottomY = baseBottomY - m_GreenButtonPressDepth * pressVisual;
 
-        const bool fullyBuried = m_GreenButtonAfterPressVisual >= 0.98f;
-        button->SetVisible(!fullyBuried);
-        button->SetSize({m_GreenButtonAfterBaseSize.x, currentHeight});
-        glm::vec2 pos = m_GreenButtonAfterBasePosition;
-        pos.y = buriedBottomY + currentHeight * 0.5f;
-        button->SetPosition(pos);
-    };
+            const bool fullyBuried = pressVisual >= 0.98f;
+            button->SetVisible(!fullyBuried);
+            button->SetSize({ baseSize.x, currentHeight });
 
-    const bool afterButtonPressed = IsGreenButtonPressed();
-    m_GreenButtonPressed = m_GreenSwitchOn || afterButtonPressed;
-    animateButtonPress(m_GreenButtonAfter, afterButtonPressed);
+            glm::vec2 pos = basePosition;
+            pos.y = buriedBottomY + currentHeight * 0.5f;
+            button->SetPosition(pos);
+        };
+
+    const bool afterButtonPressed =
+        CharacterPressesRectFromAbove(m_Fireboy, m_FireboyCollision, m_GreenButtonAfterHitbox) ||
+        CharacterPressesRectFromAbove(m_Watergirl, m_WatergirlCollision, m_GreenButtonAfterHitbox) ||
+        CubePressesRectFromAbove(m_GreenButtonAfterHitbox);
+
+    const bool afterButtonPressed2 =
+        CharacterPressesRectFromAbove(m_Fireboy, m_FireboyCollision, m_GreenButtonAfterHitbox2) ||
+        CharacterPressesRectFromAbove(m_Watergirl, m_WatergirlCollision, m_GreenButtonAfterHitbox2) ||
+        CubePressesRectFromAbove(m_GreenButtonAfterHitbox2);
+
+    m_GreenButtonPressed = afterButtonPressed || afterButtonPressed2;
+
+    animateButtonPress(
+        m_GreenButtonAfter,
+        afterButtonPressed,
+        m_GreenButtonAfterBasePosition,
+        m_GreenButtonAfterBaseSize,
+        m_GreenButtonAfterPressVisual
+    );
+    animateButtonPress(
+        m_GreenButtonAfter2,
+        afterButtonPressed2,
+        m_GreenButtonAfterBasePosition2,
+        m_GreenButtonAfterBaseSize2,
+        m_GreenButtonAfterPressVisual2
+    );
 
     const SolidRect oldPlatform = m_GreenPlatformCurrentRect;
-    const float targetY = m_GreenButtonPressed
+    const float targetY = m_GreenSwitchOn
         ? m_GreenPlatformPressedRect.center.y
         : m_GreenPlatformRestRect.center.y;
     const float deltaToTarget = targetY - m_GreenPlatformCurrentRect.center.y;
@@ -1482,10 +1545,41 @@ void App::UpdateGreenPlatform() {
     CarryCubeWithPlatform(oldPlatform, platformDeltaY);
 }
 
+void App::UpdateGreenPlatform2() {
+    // New platform: controlled by button only (inverse up/down as requested).
+    if (!m_GreenPlatform2 || !m_HasGreenPlatformBlock2 || m_GreenPlatformBlockIndex2 >= m_SolidBlocks.size()) {
+        return;
+    }
+
+    const SolidRect oldPlatform = m_GreenPlatformCurrentRect2;
+    const float targetY = m_GreenButtonPressed
+        ? m_GreenPlatformPressedRect2.center.y   // 低處
+        : m_GreenPlatformRestRect2.center.y;     // 高處
+    const float deltaToTarget = targetY - m_GreenPlatformCurrentRect2.center.y;
+    const float platformDeltaY = std::abs(deltaToTarget) <= m_GreenPlatformSpeed
+        ? deltaToTarget
+        : std::copysign(m_GreenPlatformSpeed, deltaToTarget);
+
+    if (std::abs(platformDeltaY) < 0.001f) {
+        return;
+    }
+
+    m_GreenPlatformCurrentRect2.center.y += platformDeltaY;
+    m_SolidBlocks[m_GreenPlatformBlockIndex2] = m_GreenPlatformCurrentRect2;
+    m_GreenPlatform2->SetPosition(m_GreenPlatformCurrentRect2.center);
+
+    CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldPlatform, platformDeltaY);
+    CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldPlatform, platformDeltaY);
+    CarryCubeWithPlatform(oldPlatform, platformDeltaY);
+}
+
 bool App::IsGreenButtonPressed() const {
     return CharacterPressesRectFromAbove(m_Fireboy, m_FireboyCollision, m_GreenButtonAfterHitbox) ||
-           CharacterPressesRectFromAbove(m_Watergirl, m_WatergirlCollision, m_GreenButtonAfterHitbox) ||
-           CubePressesRectFromAbove(m_GreenButtonAfterHitbox);
+        CharacterPressesRectFromAbove(m_Watergirl, m_WatergirlCollision, m_GreenButtonAfterHitbox) ||
+        CubePressesRectFromAbove(m_GreenButtonAfterHitbox) ||
+        CharacterPressesRectFromAbove(m_Fireboy, m_FireboyCollision, m_GreenButtonAfterHitbox2) ||
+        CharacterPressesRectFromAbove(m_Watergirl, m_WatergirlCollision, m_GreenButtonAfterHitbox2) ||
+        CubePressesRectFromAbove(m_GreenButtonAfterHitbox2);
 }
 
 bool App::IsGreenSwitchTouched() const {
@@ -1493,14 +1587,14 @@ bool App::IsGreenSwitchTouched() const {
     // overlap here makes it much more reliable than the strict top-only button
     // logic, especially after restart and during quick approach movement.
     return CharacterTouchesRect(m_Fireboy, m_FireboyCollision, m_GreenSwitchHitbox) ||
-           CharacterTouchesRect(m_Watergirl, m_WatergirlCollision, m_GreenSwitchHitbox) ||
-           CubeTouchesRect(m_GreenSwitchHitbox);
+        CharacterTouchesRect(m_Watergirl, m_WatergirlCollision, m_GreenSwitchHitbox) ||
+        CubeTouchesRect(m_GreenSwitchHitbox);
 }
 
 bool App::CubeTouchesRect(const SolidRect& rect) const {
     return m_Cube &&
-           m_HasCubeBlock &&
-           CheckAABB(m_CubeRect.center, m_CubeRect.size, rect.center, rect.size);
+        m_HasCubeBlock &&
+        CheckAABB(m_CubeRect.center, m_CubeRect.size, rect.center, rect.size);
 }
 
 bool App::IsCharacterAtDoor(
@@ -1524,8 +1618,8 @@ bool App::CharacterPressesRectFromAbove(
         return false;
     }
 
-    glm::vec2 bodyCenter = {0.0f, 0.0f};
-    glm::vec2 bodySize = {0.0f, 0.0f};
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
     GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
 
     const float bodyLeft = bodyCenter.x - bodySize.x * 0.5f;
@@ -1576,15 +1670,15 @@ bool App::CharacterTouchesRect(
         return false;
     }
 
-    glm::vec2 bodyCenter = {0.0f, 0.0f};
-    glm::vec2 bodySize = {0.0f, 0.0f};
-    glm::vec2 headCenter = {0.0f, 0.0f};
-    glm::vec2 headSize = {0.0f, 0.0f};
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
+    glm::vec2 headCenter = { 0.0f, 0.0f };
+    glm::vec2 headSize = { 0.0f, 0.0f };
     GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
     GetCharacterHeadBox(character->GetPosition(), profile, headCenter, headSize);
 
     return CheckAABB(bodyCenter, bodySize, rect.center, rect.size) ||
-           CheckAABB(headCenter, headSize, rect.center, rect.size);
+        CheckAABB(headCenter, headSize, rect.center, rect.size);
 }
 
 bool App::CharacterTouchesHazard(
@@ -1596,15 +1690,15 @@ bool App::CharacterTouchesHazard(
         return false;
     }
 
-    glm::vec2 bodyCenter = {0.0f, 0.0f};
-    glm::vec2 bodySize = {0.0f, 0.0f};
-    glm::vec2 headCenter = {0.0f, 0.0f};
-    glm::vec2 headSize = {0.0f, 0.0f};
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
+    glm::vec2 headCenter = { 0.0f, 0.0f };
+    glm::vec2 headSize = { 0.0f, 0.0f };
     GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
     GetCharacterHeadBox(character->GetPosition(), profile, headCenter, headSize);
 
     return CheckAABB(bodyCenter, bodySize, hazard.center, hazard.size) ||
-           CheckAABB(headCenter, headSize, hazard.center, hazard.size);
+        CheckAABB(headCenter, headSize, hazard.center, hazard.size);
 }
 
 bool App::WouldCharacterHitTerrainAt(
@@ -1613,10 +1707,10 @@ bool App::WouldCharacterHitTerrainAt(
     bool allowSupportContacts,
     std::size_t ignoredSolidBlockIndex
 ) const {
-    glm::vec2 bodyCenter = {0.0f, 0.0f};
-    glm::vec2 bodySize = {0.0f, 0.0f};
-    glm::vec2 headCenter = {0.0f, 0.0f};
-    glm::vec2 headSize = {0.0f, 0.0f};
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
+    glm::vec2 headCenter = { 0.0f, 0.0f };
+    glm::vec2 headSize = { 0.0f, 0.0f };
     GetCharacterBodyBox(bodyPos, profile, bodyCenter, bodySize);
     GetCharacterHeadBox(bodyPos, profile, headCenter, headSize);
 
@@ -1690,8 +1784,8 @@ void App::CarryCharacterWithPlatform(
         return;
     }
 
-    glm::vec2 bodyCenter = {0.0f, 0.0f};
-    glm::vec2 bodySize = {0.0f, 0.0f};
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
     GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
 
     const float bodyLeft = bodyCenter.x - bodySize.x * 0.5f;
@@ -1713,7 +1807,7 @@ void App::CarryCharacterWithPlatform(
     }
 
     const glm::vec2 currentPos = character->GetPosition();
-    const glm::vec2 carriedPos = currentPos + glm::vec2{0.0f, platformDeltaY};
+    const glm::vec2 carriedPos = currentPos + glm::vec2{ 0.0f, platformDeltaY };
     if (!WouldCharacterHitTerrainAt(carriedPos, profile)) {
         character->SetPosition(carriedPos);
     }
@@ -1730,8 +1824,8 @@ void App::CarryCharacterWithCube(
         return;
     }
 
-    glm::vec2 bodyCenter = {0.0f, 0.0f};
-    glm::vec2 bodySize = {0.0f, 0.0f};
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
     GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
 
     const float bodyLeft = bodyCenter.x - bodySize.x * 0.5f;
@@ -1776,22 +1870,23 @@ void App::CarryCharacterWithCube(
         glm::vec2 carriedPos = pos;
 
         if (std::abs(cubeDelta.y) > 0.001f) {
-            const glm::vec2 yOnlyPos = carriedPos + glm::vec2{0.0f, cubeDelta.y};
+            const glm::vec2 yOnlyPos = carriedPos + glm::vec2{ 0.0f, cubeDelta.y };
             if (!WouldCharacterHitTerrainAt(yOnlyPos, profile, true, m_CubeBlockIndex)) {
                 carriedPos = yOnlyPos;
             }
         }
 
         if (std::abs(cubeDelta.x) > 0.001f) {
-            const glm::vec2 xyPos = carriedPos + glm::vec2{cubeDelta.x, 0.0f};
+            const glm::vec2 xyPos = carriedPos + glm::vec2{ cubeDelta.x, 0.0f };
             if (!WouldCharacterHitTerrainAt(xyPos, profile, true, m_CubeBlockIndex)) {
                 carriedPos = xyPos;
             }
         }
 
         pos = carriedPos;
-    } else {
-        const glm::vec2 pushedPos = pos + glm::vec2{cubeDelta.x, 0.0f};
+    }
+    else {
+        const glm::vec2 pushedPos = pos + glm::vec2{ cubeDelta.x, 0.0f };
         if (!WouldCharacterHitTerrainAt(pushedPos, profile, true, m_CubeBlockIndex)) {
             pos = pushedPos;
         }
@@ -1840,8 +1935,8 @@ void App::ResolveHorizontalCollisions(
     // Characters use "terrain-aware horizontal collision": before deciding a
     // rectangle side is a wall, try to interpret it as a valid step/slope
     // transition. This is what makes the level's hand-authored ramps playable.
-    glm::vec2 oldBodyCenter = {0.0f, 0.0f};
-    glm::vec2 oldBodySize = {0.0f, 0.0f};
+    glm::vec2 oldBodyCenter = { 0.0f, 0.0f };
+    glm::vec2 oldBodySize = { 0.0f, 0.0f };
     GetCharacterBodyBox(oldPos, profile, oldBodyCenter, oldBodySize);
     const float oldBottom = oldBodyCenter.y - oldBodySize.y * 0.5f;
 
@@ -1867,9 +1962,9 @@ void App::ResolveHorizontalCollisions(
                 return false;
             }
 
-            const glm::vec2 candidatePos = {newPos.x, raisedY};
-            glm::vec2 candidateBodyCenter = {0.0f, 0.0f};
-            glm::vec2 candidateBodySize = {0.0f, 0.0f};
+            const glm::vec2 candidatePos = { newPos.x, raisedY };
+            glm::vec2 candidateBodyCenter = { 0.0f, 0.0f };
+            glm::vec2 candidateBodySize = { 0.0f, 0.0f };
             GetCharacterBodyBox(candidatePos, profile, candidateBodyCenter, candidateBodySize);
             const float candidateBottom = candidateBodyCenter.y - candidateBodySize.y * 0.5f;
 
@@ -1894,17 +1989,17 @@ void App::ResolveHorizontalCollisions(
 
             newPos.y = raisedY;
             return true;
-        };
+            };
 
         auto canStepToNearbyGround = [&]() {
             float targetGroundY = 0.0f;
-            const glm::vec2 probePos = {newPos.x, oldPos.y};
+            const glm::vec2 probePos = { newPos.x, oldPos.y };
             if (!FindNearbyGroundY(
-                    probePos,
-                    m_StepUpHeight + m_GroundSnapTolerance,
-                    targetGroundY,
-                    profile
-                )) {
+                probePos,
+                m_StepUpHeight + m_GroundSnapTolerance,
+                targetGroundY,
+                profile
+            )) {
                 return false;
             }
 
@@ -1919,10 +2014,10 @@ void App::ResolveHorizontalCollisions(
                 targetGroundY - profile.bodyHitboxOffset.y +
                     profile.bodyHitboxSize.y * 0.5f + 0.1f,
             };
-            glm::vec2 candidateBodyCenter = {0.0f, 0.0f};
-            glm::vec2 candidateBodySize = {0.0f, 0.0f};
-            glm::vec2 candidateHeadCenter = {0.0f, 0.0f};
-            glm::vec2 candidateHeadSize = {0.0f, 0.0f};
+            glm::vec2 candidateBodyCenter = { 0.0f, 0.0f };
+            glm::vec2 candidateBodySize = { 0.0f, 0.0f };
+            glm::vec2 candidateHeadCenter = { 0.0f, 0.0f };
+            glm::vec2 candidateHeadSize = { 0.0f, 0.0f };
             GetCharacterBodyBox(candidatePos, profile, candidateBodyCenter, candidateBodySize);
             GetCharacterHeadBox(candidatePos, profile, candidateHeadCenter, candidateHeadSize);
             const float candidateBottom = candidateBodyCenter.y - candidateBodySize.y * 0.5f;
@@ -1956,22 +2051,18 @@ void App::ResolveHorizontalCollisions(
 
             newPos.y = candidatePos.y;
             return true;
-        };
+            };
 
         if (newPos.x > oldPos.x && oldRight <= blockLeft) {
-            if (!canStepUp(blockTop) &&
-                !canStepToNearbyGround() &&
-                !TrySnapToSlopeTopTransition(oldPos, newPos, block, profile)) {
-                const float rightExtent = GetCharacterRightEdge({0.0f, 0.0f}, profile);
+            if (!canStepUp(blockTop) && !canStepToNearbyGround()) {
+                const float rightExtent = GetCharacterRightEdge({ 0.0f, 0.0f }, profile);
                 newPos.x = blockLeft - rightExtent;
             }
         }
 
         if (newPos.x < oldPos.x && oldLeft >= blockRight) {
-            if (!canStepUp(blockTop) &&
-                !canStepToNearbyGround() &&
-                !TrySnapToSlopeTopTransition(oldPos, newPos, block, profile)) {
-                const float leftExtent = -GetCharacterLeftEdge({0.0f, 0.0f}, profile);
+            if (!canStepUp(blockTop) && !canStepToNearbyGround()) {
+                const float leftExtent = -GetCharacterLeftEdge({ 0.0f, 0.0f }, profile);
                 newPos.x = blockRight + leftExtent;
             }
         }
@@ -1997,20 +2088,20 @@ void App::ResolveVerticalCollisions(
     bool foundGround = false;
     float bestGroundY = -std::numeric_limits<float>::infinity();
 
-    glm::vec2 oldBodyCenter = {0.0f, 0.0f};
-    glm::vec2 oldBodySize = {0.0f, 0.0f};
-    glm::vec2 newBodyCenter = {0.0f, 0.0f};
-    glm::vec2 newBodySize = {0.0f, 0.0f};
-    glm::vec2 oldHeadCenter = {0.0f, 0.0f};
-    glm::vec2 oldHeadSize = {0.0f, 0.0f};
+    glm::vec2 oldBodyCenter = { 0.0f, 0.0f };
+    glm::vec2 oldBodySize = { 0.0f, 0.0f };
+    glm::vec2 newBodyCenter = { 0.0f, 0.0f };
+    glm::vec2 newBodySize = { 0.0f, 0.0f };
+    glm::vec2 oldHeadCenter = { 0.0f, 0.0f };
+    glm::vec2 oldHeadSize = { 0.0f, 0.0f };
     GetCharacterBodyBox(oldPos, profile, oldBodyCenter, oldBodySize);
     GetCharacterBodyBox(newPos, profile, newBodyCenter, newBodySize);
     GetCharacterHeadBox(oldPos, profile, oldHeadCenter, oldHeadSize);
 
     for (const auto& block : m_SolidBlocks) {
         const bool bodyOverlap = CheckAABB(newBodyCenter, newBodySize, block.center, block.size);
-        glm::vec2 newHeadCenter = {0.0f, 0.0f};
-        glm::vec2 newHeadSize = {0.0f, 0.0f};
+        glm::vec2 newHeadCenter = { 0.0f, 0.0f };
+        glm::vec2 newHeadSize = { 0.0f, 0.0f };
         GetCharacterHeadBox(newPos, profile, newHeadCenter, newHeadSize);
         const bool headOverlap = CheckAABB(newHeadCenter, newHeadSize, block.center, block.size);
         if (!bodyOverlap && !headOverlap) {
@@ -2032,11 +2123,12 @@ void App::ResolveVerticalCollisions(
                 bestGroundY = blockTop;
                 foundGround = true;
             }
-        } else if (block.blockBottom &&
-                   headOverlap &&
-                   velocity.y > 0.0f &&
-                   oldTop <= blockBottom + m_GroundSnapTolerance &&
-                   newTop >= blockBottom - m_GroundSnapTolerance) {
+        }
+        else if (block.blockBottom &&
+            headOverlap &&
+            velocity.y > 0.0f &&
+            oldTop <= blockBottom + m_GroundSnapTolerance &&
+            newTop >= blockBottom - m_GroundSnapTolerance) {
             const float headTopOffset = profile.headHitboxOffset.y + profile.headHitboxSize.y * 0.5f;
             newPos.y = blockBottom - headTopOffset;
             velocity.y = 0.0f;
@@ -2059,8 +2151,8 @@ void App::ResolveVerticalCollisions(
     }
 
     if (!hitCeiling && ResolveSlopeGrounding(oldPos, newPos, profile, velocity, onGround)) {
-        glm::vec2 groundedBodyCenter = {0.0f, 0.0f};
-        glm::vec2 groundedBodySize = {0.0f, 0.0f};
+        glm::vec2 groundedBodyCenter = { 0.0f, 0.0f };
+        glm::vec2 groundedBodySize = { 0.0f, 0.0f };
         GetCharacterBodyBox(newPos, profile, groundedBodyCenter, groundedBodySize);
         const float slopeGroundY = groundedBodyCenter.y - groundedBodySize.y * 0.5f;
         if (!foundGround || slopeGroundY > bestGroundY) {
@@ -2113,7 +2205,7 @@ SolidRect App::ImageRectToWorldRect(float x1, float y1, float x2, float y2, bool
     SolidRect rect;
     rect.center.x = imageCenterX - (m_BackgroundDisplayedSize.x * 0.5f);
     rect.center.y = (m_BackgroundDisplayedSize.y * 0.5f) - imageCenterY;
-    rect.size = {width, height};
+    rect.size = { width, height };
     rect.blockBottom = blockBottom;
     return rect;
 }
@@ -2144,7 +2236,7 @@ void App::RecalculateCharacterCollisionBoxes(
         std::max(1.0f, bodySize.x * profile.bodyHitboxScale.x - profile.bodyHitboxPadding.x),
         std::max(1.0f, bodySize.y * profile.bodyHitboxScale.y - profile.bodyHitboxPadding.y),
     };
-    profile.bodyHitboxOffset = {0.0f, -2.0f};
+    profile.bodyHitboxOffset = { 0.0f, -2.0f };
 
     profile.headHitboxSize = {
         std::max(1.0f, headSize.x * profile.headHitboxScale.x - profile.headHitboxPadding.x),
@@ -2186,21 +2278,21 @@ bool App::CheckCharacterCollision(
     const SolidRect& block,
     const CharacterCollisionProfile& profile
 ) const {
-    glm::vec2 bodyCenter = {0.0f, 0.0f};
-    glm::vec2 bodySize = {0.0f, 0.0f};
-    glm::vec2 headCenter = {0.0f, 0.0f};
-    glm::vec2 headSize = {0.0f, 0.0f};
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
+    glm::vec2 headCenter = { 0.0f, 0.0f };
+    glm::vec2 headSize = { 0.0f, 0.0f };
     GetCharacterBodyBox(bodyPos, profile, bodyCenter, bodySize);
     GetCharacterHeadBox(bodyPos, profile, headCenter, headSize);
     return CheckAABB(bodyCenter, bodySize, block.center, block.size) ||
-           CheckAABB(headCenter, headSize, block.center, block.size);
+        CheckAABB(headCenter, headSize, block.center, block.size);
 }
 
 float App::GetCharacterLeftEdge(const glm::vec2& bodyPos, const CharacterCollisionProfile& profile) const {
-    glm::vec2 bodyCenter = {0.0f, 0.0f};
-    glm::vec2 bodySize = {0.0f, 0.0f};
-    glm::vec2 headCenter = {0.0f, 0.0f};
-    glm::vec2 headSize = {0.0f, 0.0f};
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
+    glm::vec2 headCenter = { 0.0f, 0.0f };
+    glm::vec2 headSize = { 0.0f, 0.0f };
     GetCharacterBodyBox(bodyPos, profile, bodyCenter, bodySize);
     GetCharacterHeadBox(bodyPos, profile, headCenter, headSize);
     return std::min(
@@ -2210,10 +2302,10 @@ float App::GetCharacterLeftEdge(const glm::vec2& bodyPos, const CharacterCollisi
 }
 
 float App::GetCharacterRightEdge(const glm::vec2& bodyPos, const CharacterCollisionProfile& profile) const {
-    glm::vec2 bodyCenter = {0.0f, 0.0f};
-    glm::vec2 bodySize = {0.0f, 0.0f};
-    glm::vec2 headCenter = {0.0f, 0.0f};
-    glm::vec2 headSize = {0.0f, 0.0f};
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
+    glm::vec2 headCenter = { 0.0f, 0.0f };
+    glm::vec2 headSize = { 0.0f, 0.0f };
     GetCharacterBodyBox(bodyPos, profile, bodyCenter, bodySize);
     GetCharacterHeadBox(bodyPos, profile, headCenter, headSize);
     return std::max(
@@ -2223,8 +2315,8 @@ float App::GetCharacterRightEdge(const glm::vec2& bodyPos, const CharacterCollis
 }
 
 float App::GetCharacterBodyBottom(const glm::vec2& bodyPos, const CharacterCollisionProfile& profile) const {
-    glm::vec2 bodyCenter = {0.0f, 0.0f};
-    glm::vec2 bodySize = {0.0f, 0.0f};
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
     GetCharacterBodyBox(bodyPos, profile, bodyCenter, bodySize);
     return bodyCenter.y - bodySize.y * 0.5f;
 }
@@ -2250,8 +2342,8 @@ float App::GetFireboyRightEdge(const glm::vec2& bodyPos) const {
 }
 
 float App::GetFireboyHeadTop(const glm::vec2& bodyPos) const {
-    glm::vec2 headCenter = {0.0f, 0.0f};
-    glm::vec2 headSize = {0.0f, 0.0f};
+    glm::vec2 headCenter = { 0.0f, 0.0f };
+    glm::vec2 headSize = { 0.0f, 0.0f };
     GetFireboyHeadBox(bodyPos, headCenter, headSize);
     return headCenter.y + headSize.y * 0.5f;
 }
@@ -2297,10 +2389,10 @@ bool App::ResolveSlopeGrounding(
         return false;
     }
 
-    glm::vec2 oldBodyCenter = {0.0f, 0.0f};
-    glm::vec2 oldBodySize = {0.0f, 0.0f};
-    glm::vec2 newBodyCenter = {0.0f, 0.0f};
-    glm::vec2 newBodySize = {0.0f, 0.0f};
+    glm::vec2 oldBodyCenter = { 0.0f, 0.0f };
+    glm::vec2 oldBodySize = { 0.0f, 0.0f };
+    glm::vec2 newBodyCenter = { 0.0f, 0.0f };
+    glm::vec2 newBodySize = { 0.0f, 0.0f };
     GetCharacterBodyBox(oldPos, profile, oldBodyCenter, oldBodySize);
     GetCharacterBodyBox(newPos, profile, newBodyCenter, newBodySize);
 
@@ -2369,10 +2461,10 @@ bool App::ResolveCeilingSlopeCollision(
         return false;
     }
 
-    glm::vec2 oldHeadCenter = {0.0f, 0.0f};
-    glm::vec2 oldHeadSize = {0.0f, 0.0f};
-    glm::vec2 newHeadCenter = {0.0f, 0.0f};
-    glm::vec2 newHeadSize = {0.0f, 0.0f};
+    glm::vec2 oldHeadCenter = { 0.0f, 0.0f };
+    glm::vec2 oldHeadSize = { 0.0f, 0.0f };
+    glm::vec2 newHeadCenter = { 0.0f, 0.0f };
+    glm::vec2 newHeadSize = { 0.0f, 0.0f };
     GetCharacterHeadBox(oldPos, profile, oldHeadCenter, oldHeadSize);
     GetCharacterHeadBox(newPos, profile, newHeadCenter, newHeadSize);
 
@@ -2419,7 +2511,7 @@ bool App::ResolveCeilingSlopeCollision(
                 }
             }
         }
-    };
+        };
 
     accumulateCeilingHit(m_CeilingSlopes);
 
@@ -2449,10 +2541,10 @@ bool App::TrySnapToSlopeTopTransition(
         return false;
     }
 
-    glm::vec2 oldBodyCenter = {0.0f, 0.0f};
-    glm::vec2 oldBodySize = {0.0f, 0.0f};
-    glm::vec2 newBodyCenter = {0.0f, 0.0f};
-    glm::vec2 newBodySize = {0.0f, 0.0f};
+    glm::vec2 oldBodyCenter = { 0.0f, 0.0f };
+    glm::vec2 oldBodySize = { 0.0f, 0.0f };
+    glm::vec2 newBodyCenter = { 0.0f, 0.0f };
+    glm::vec2 newBodySize = { 0.0f, 0.0f };
     GetCharacterBodyBox(oldPos, profile, oldBodyCenter, oldBodySize);
     GetCharacterBodyBox(newPos, profile, newBodyCenter, newBodySize);
 
@@ -2512,8 +2604,8 @@ bool App::FindBestSlopeYAtX(
 ) const {
     // Shared query used by slope follow and ground search for characters.
     // It returns the best walkable slope height for a desired x position.
-    glm::vec2 oldBodyCenter = {0.0f, 0.0f};
-    glm::vec2 oldBodySize = {0.0f, 0.0f};
+    glm::vec2 oldBodyCenter = { 0.0f, 0.0f };
+    glm::vec2 oldBodySize = { 0.0f, 0.0f };
     GetCharacterBodyBox(oldPos, profile, oldBodyCenter, oldBodySize);
 
     const float centerOffsetX = oldBodyCenter.x - oldPos.x;
@@ -2589,8 +2681,8 @@ bool App::FindNearbyGroundY(
 ) const {
     // Nearby-ground search merges flat blocks and slope tops into one support
     // concept. This is one of the main anti-gap / anti-sticking helpers.
-    glm::vec2 bodyCenter = {0.0f, 0.0f};
-    glm::vec2 bodySize = {0.0f, 0.0f};
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
     GetCharacterBodyBox(pos, profile, bodyCenter, bodySize);
 
     const float left = bodyCenter.x - bodySize.x * 0.5f;
@@ -2642,8 +2734,8 @@ bool App::FindNearbyCeilingY(
 ) const {
     // Mirror of FindNearbyGroundY for ceilings. It helps avoid tiny seam bugs
     // when the head is almost aligned with a block bottom or ceiling slope.
-    glm::vec2 headCenter = {0.0f, 0.0f};
-    glm::vec2 headSize = {0.0f, 0.0f};
+    glm::vec2 headCenter = { 0.0f, 0.0f };
+    glm::vec2 headSize = { 0.0f, 0.0f };
     GetCharacterHeadBox(pos, profile, headCenter, headSize);
 
     const float left = headCenter.x - headSize.x * 0.5f;

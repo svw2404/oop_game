@@ -36,6 +36,25 @@ void App::Start() {
     // creates a fresh world instead of stacking duplicate drawables.
     m_Root = Util::Renderer();
 
+    // 載入並播放背景音樂
+    if (!m_BackgroundMusic) {
+        m_BackgroundMusic = std::make_shared<Util::BGM>(GA_RESOURCE_DIR "/Music/Adventure.mp3");
+        m_BackgroundMusic->SetVolume(64); // 設定音量 (範圍 0~128)
+        m_BackgroundMusic->Play();        // 預設 -1 表示無限循環播放
+    }
+
+    // 載入死亡音效
+    if (!m_DeathSound) {
+        m_DeathSound = std::make_shared<Util::SFX>(GA_RESOURCE_DIR "/Music/Death.mp3");
+        m_DeathSound->SetVolume(64); // 設定音量
+    }
+
+    // 載入過關音效
+    if (!m_FinishSound) {
+        m_FinishSound = std::make_shared<Util::SFX>(GA_RESOURCE_DIR "/Music/Finish.mp3");
+        m_FinishSound->SetVolume(64); // 設定音量
+    }
+
     // -------------------------------------------------------------------------
     // 1) 基本場景參數
     // -------------------------------------------------------------------------
@@ -64,14 +83,17 @@ void App::Start() {
     m_Diamonds.clear();
     m_GreenButton.reset();
     m_GreenButtonAfter.reset();
+    m_GreenButtonAfter2.reset();
     m_GreenSwitch.reset();
     m_Cube.reset();
     m_HasGreenPlatformBlock = false;
+    m_HasGreenPlatformBlock2 = false;
     m_HasCubeBlock = false;
     m_GreenButtonPressed = false;
     m_GreenSwitchOn = false;
     m_GreenSwitchTouchLatch = false;
     m_GreenButtonAfterPressVisual = 0.0f;
+    m_GreenButtonAfterPressVisual2 = 0.0f;
     m_FireDiamondsCollected = 0;
     m_WaterDiamondsCollected = 0;
     m_GreenDiamondsCollected = 0;
@@ -118,6 +140,25 @@ void App::Start() {
     m_LevelStartTimeMs = 0.0f;
     m_LevelCompleteTimeMs = 0.0f;
     m_GreenButtonAfterBaseSize = {0.0f, 0.0f};
+    m_GreenButtonAfterBaseSize2 = { 0.0f, 0.0f };
+    m_DeathMusicPlayed = false;
+    m_FinishMusicPlayed = false;
+
+    if (!m_GameplayMusic) {
+        m_GameplayMusic = std::make_unique<Util::BGM>(
+            std::string(GA_RESOURCE_DIR) + "/Music/Adventure.mp3"
+        );
+    }
+    if (!m_DeathMusic) {
+        m_DeathMusic = std::make_unique<Util::BGM>(
+            std::string(GA_RESOURCE_DIR) + "/Music/Death.mp3"
+        );
+    }
+    if (!m_FinishMusic) {
+        m_FinishMusic = std::make_unique<Util::BGM>(
+            std::string(GA_RESOURCE_DIR) + "/Music/Finish.mp3"
+        );
+    }
 
     // Base collision setup:
     // - m_SolidBlocks stores the terrain mass used by AABB collision.
@@ -280,12 +321,32 @@ void App::Start() {
     m_GreenPlatform->SetPosition(m_GreenPlatformCurrentRect.center);
     m_Root.AddChild(m_GreenPlatform);
 
+    // Second moving platform (top-right):
+    // Rest = high, Pressed = low.
+    m_GreenPlatformRestRect2 = ImageRectToWorldRect(2081.0f, 676.0f, 2321.0f, 748.0f);
+    m_GreenPlatformPressedRect2 = ImageRectToWorldRect(2081.0f, 897.0f, 2321.0f, 969.0f);
+    m_GreenPlatformCurrentRect2 = m_GreenPlatformRestRect2;
+    m_GreenPlatformBlockIndex2 = m_SolidBlocks.size();
+    m_HasGreenPlatformBlock2 = true;
+    m_SolidBlocks.push_back(m_GreenPlatformCurrentRect2);
+
+    m_GreenPlatform2 = std::make_shared<Character>(
+        GA_RESOURCE_DIR "/Image/Assets/platform_green.png"
+    );
+    m_GreenPlatform2->SetZIndex(7);
+    m_GreenPlatform2->SetSize({
+        m_GreenPlatformCurrentRect2.size.x,
+        m_GreenPlatformCurrentRect2.size.x * (107.0f / 333.0f),
+        });
+    m_GreenPlatform2->SetPosition(m_GreenPlatformCurrentRect2.center);
+    m_Root.AddChild(m_GreenPlatform2);
+
     // Control anchors for the green platform:
     // - the first mapped control is now a toggle switch
     // - the second mapped control stays a pressure button
     m_GreenSwitchHitbox = ImageRectToWorldRect(1180.0f, 1280.0f, 1345.0f, 1340.0f);
     m_GreenButtonAfterHitbox = ImageRectToWorldRect(365.0f, 850.0f, 455.0f, 912.0f);
-
+    m_GreenButtonAfterHitbox2 = ImageRectToWorldRect(1900.0f, 980.0f, 2000.0f, 1040.0f);
     // -------------------------------------------------------------------------
     // 3.5) Level 1 prop pass
     // -------------------------------------------------------------------------
@@ -565,10 +626,34 @@ void App::Start() {
         std::max(4.0f, greenButtonSize.y * 0.16f),
     };
 
+    m_GreenButtonAfter2 = std::make_shared<Character>(
+        GA_RESOURCE_DIR "/Image/Assets/button_green.png"
+    );
+    m_GreenButtonAfter2->SetZIndex(7.0f);
+    m_GreenButtonAfter2->SetSize(greenButtonSize);
+    m_GreenButtonAfterBasePosition2 = {
+        m_GreenButtonAfterHitbox2.center.x,
+        ImagePointToWorldPoint(0.0f, 665.0f).y + greenButtonSize.y * 0.5f,
+    };
+    m_GreenButtonAfterBaseSize2 = greenButtonSize;
+    m_GreenButtonAfter2->SetPosition(m_GreenButtonAfterBasePosition2);
+    m_Root.AddChild(m_GreenButtonAfter2);
+    m_LevelProps.push_back(m_GreenButtonAfter2);
+
+    m_GreenButtonAfterHitbox2.center = {
+        m_GreenButtonAfterBasePosition2.x,
+        ImagePointToWorldPoint(0.0f, 665.0f).y + std::max(4.0f, greenButtonSize.y * 0.16f) * 0.5f,
+    };
+    m_GreenButtonAfterHitbox2.size = {
+        greenButtonSize.x * 0.72f,
+        std::max(4.0f, greenButtonSize.y * 0.16f),
+    };
     // Top exit doors.
     // Each door has:
     // - a visual sprite with open/close animation frames
     // - a trigger rect checked against the matching character only
+    const float doorScale = propScale * 1.6f;
+
     m_FireboyDoor.closedImagePath =
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_closed.png";
     m_FireboyDoor.openingImagePaths = {
@@ -579,9 +664,9 @@ void App::Start() {
     };
     m_FireboyDoor.sprite = addPropAtBottom(
         m_FireboyDoor.closedImagePath,
-        1965.0f, 362.0f, 160.0f, 205.0f, 7.2f, propScale
+        1965.0f, 362.0f, 160.0f, 205.0f, 7.2f, doorScale
     );
-    const glm::vec2 fireboyDoorSize = imageSizeToWorldSize(160.0f, 205.0f, propScale);
+    const glm::vec2 fireboyDoorSize = imageSizeToWorldSize(160.0f, 205.0f, doorScale);
     m_FireboyDoor.triggerRect.center = m_FireboyDoor.sprite->GetPosition() + glm::vec2{
         0.0f,
         -fireboyDoorSize.y * 0.14f,
@@ -601,9 +686,9 @@ void App::Start() {
     };
     m_WatergirlDoor.sprite = addPropAtBottom(
         m_WatergirlDoor.closedImagePath,
-        2140.0f, 362.0f, 162.0f, 205.0f, 7.2f, propScale
+        2140.0f, 362.0f, 162.0f, 205.0f, 7.2f, doorScale
     );
-    const glm::vec2 watergirlDoorSize = imageSizeToWorldSize(162.0f, 205.0f, propScale);
+    const glm::vec2 watergirlDoorSize = imageSizeToWorldSize(162.0f, 205.0f, doorScale);
     m_WatergirlDoor.triggerRect.center = m_WatergirlDoor.sprite->GetPosition() + glm::vec2{
         watergirlDoorSize.x * 0.02f,
         -watergirlDoorSize.y * 0.10f,
@@ -644,38 +729,34 @@ void App::Start() {
     addCollectibleDiamond(
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_red.png",
         DiamondType::Fire,
-        800.0f, 230.0f, 121.0f, 111.0f, 8.4f, diamondScale
+        720.0f, 170.0f, 121.0f, 111.0f, 8.4f, diamondScale
     );
     addCollectibleDiamond(
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_blue.png",
         DiamondType::Water,
-        120.0f, 672.0f, 117.0f, 111.0f, 8.4f, diamondScale
+        130.0f, 310.0f, 117.0f, 111.0f, 8.4f, diamondScale
     );
     addCollectibleDiamond(
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_blue.png",
         DiamondType::Water,
-        1450.0f, 292.0f, 117.0f, 111.0f, 8.4f, diamondScale
-    );
-    addCollectibleDiamond(
-        std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_blue.png",
-        DiamondType::Water,
-        1657.0f, 1153.0f, 117.0f, 111.0f, 8.4f, diamondScale
+        1400.0f, 292.0f, 117.0f, 111.0f, 8.4f, diamondScale
     );
     addCollectibleDiamond(
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_red.png",
         DiamondType::Fire,
-        1335.0f, 1643.0f, 121.0f, 111.0f, 8.4f, diamondScale
+        1200.0f, 292.0f, 117.0f, 111.0f, 8.4f, diamondScale
+    );
+    addCollectibleDiamond(
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_red.png",
+        DiamondType::Fire,
+        1260.0f, 1600.0f, 121.0f, 111.0f, 8.4f, diamondScale
     );
     addCollectibleDiamond(
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_blue.png",
         DiamondType::Water,
-        1880.0f, 1643.0f, 117.0f, 111.0f, 8.4f, diamondScale
+        1750.0f, 1600.0f, 117.0f, 111.0f, 8.4f, diamondScale
     );
-    addCollectibleDiamond(
-        std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_green.png",
-        DiamondType::Neutral,
-        975.0f, 1125.0f, 113.0f, 106.0f, 8.4f, diamondScale
-    );
+
 
     m_Slopes = {
         // Slope 1: leftmost upper-left small connector
@@ -1281,6 +1362,9 @@ void App::Start() {
     // an accidental pressed/not-pressed edge from the previous run.
     m_GreenSwitchTouchLatch = IsGreenSwitchTouched();
     m_LevelStartTimeMs = Util::Time::GetElapsedTimeMs();
+    if (m_GameplayMusic) {
+        m_GameplayMusic->Play(-1);
+    }
 
     m_CurrentState = State::UPDATE;
 }

@@ -21,6 +21,7 @@ namespace {
     constexpr float AIR_RUN_EPSILON = 0.25f;
     constexpr float MAX_AIR_HEAD_ROTATION = 0.45f;
     constexpr float FIXED_TIME_STEP = 1.0f / 60.0f;
+    constexpr float DESCENDING_PLATFORM_HEAD_CLEARANCE = 2.0f;
 }
 
 void App::Update() {
@@ -1589,17 +1590,35 @@ void App::UpdateGreenPlatform() {
         ? deltaToTarget
         : std::copysign(m_GreenPlatformSpeed, deltaToTarget);
 
-    if (std::abs(platformDeltaY) < 0.001f) {
+    float resolvedPlatformDeltaY = platformDeltaY;
+    if (resolvedPlatformDeltaY < -0.001f) {
+        resolvedPlatformDeltaY = ClampDescendingPlatformDeltaAgainstCharacter(
+            m_Fireboy,
+            m_FireboyCollision,
+            oldPlatform,
+            resolvedPlatformDeltaY,
+            m_GreenPlatformBlockIndex
+        );
+        resolvedPlatformDeltaY = ClampDescendingPlatformDeltaAgainstCharacter(
+            m_Watergirl,
+            m_WatergirlCollision,
+            oldPlatform,
+            resolvedPlatformDeltaY,
+            m_GreenPlatformBlockIndex
+        );
+    }
+
+    if (std::abs(resolvedPlatformDeltaY) < 0.001f) {
         return;
     }
 
-    m_GreenPlatformCurrentRect.center.y += platformDeltaY;
+    m_GreenPlatformCurrentRect.center.y += resolvedPlatformDeltaY;
     m_SolidBlocks[m_GreenPlatformBlockIndex] = m_GreenPlatformCurrentRect;
     m_GreenPlatform->SetPosition(m_GreenPlatformCurrentRect.center);
 
-    CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldPlatform, platformDeltaY);
-    CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldPlatform, platformDeltaY);
-    CarryCubeWithPlatform(oldPlatform, platformDeltaY);
+    CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldPlatform, resolvedPlatformDeltaY);
+    CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldPlatform, resolvedPlatformDeltaY);
+    CarryCubeWithPlatform(oldPlatform, resolvedPlatformDeltaY);
 }
 
 void App::UpdateGreenPlatform2() {
@@ -1617,17 +1636,35 @@ void App::UpdateGreenPlatform2() {
         ? deltaToTarget
         : std::copysign(m_GreenPlatformSpeed, deltaToTarget);
 
-    if (std::abs(platformDeltaY) < 0.001f) {
+    float resolvedPlatformDeltaY = platformDeltaY;
+    if (resolvedPlatformDeltaY < -0.001f) {
+        resolvedPlatformDeltaY = ClampDescendingPlatformDeltaAgainstCharacter(
+            m_Fireboy,
+            m_FireboyCollision,
+            oldPlatform,
+            resolvedPlatformDeltaY,
+            m_GreenPlatformBlockIndex2
+        );
+        resolvedPlatformDeltaY = ClampDescendingPlatformDeltaAgainstCharacter(
+            m_Watergirl,
+            m_WatergirlCollision,
+            oldPlatform,
+            resolvedPlatformDeltaY,
+            m_GreenPlatformBlockIndex2
+        );
+    }
+
+    if (std::abs(resolvedPlatformDeltaY) < 0.001f) {
         return;
     }
 
-    m_GreenPlatformCurrentRect2.center.y += platformDeltaY;
+    m_GreenPlatformCurrentRect2.center.y += resolvedPlatformDeltaY;
     m_SolidBlocks[m_GreenPlatformBlockIndex2] = m_GreenPlatformCurrentRect2;
     m_GreenPlatform2->SetPosition(m_GreenPlatformCurrentRect2.center);
 
-    CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldPlatform, platformDeltaY);
-    CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldPlatform, platformDeltaY);
-    CarryCubeWithPlatform(oldPlatform, platformDeltaY);
+    CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldPlatform, resolvedPlatformDeltaY);
+    CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldPlatform, resolvedPlatformDeltaY);
+    CarryCubeWithPlatform(oldPlatform, resolvedPlatformDeltaY);
 }
 
 bool App::IsGreenButtonPressed() const {
@@ -1831,6 +1868,54 @@ bool App::IsCharacterInLiquid(
     return false;
 }
 
+float App::ClampDescendingPlatformDeltaAgainstCharacter(
+    const std::shared_ptr<HeadBodyCharacter>& character,
+    const CharacterCollisionProfile& profile,
+    const SolidRect& oldPlatform,
+    float requestedDeltaY,
+    std::size_t
+) const {
+    if (!character || !character->IsAlive() || requestedDeltaY >= -0.001f) {
+        return requestedDeltaY;
+    }
+
+    glm::vec2 bodyCenter = { 0.0f, 0.0f };
+    glm::vec2 bodySize = { 0.0f, 0.0f };
+    glm::vec2 headCenter = { 0.0f, 0.0f };
+    glm::vec2 headSize = { 0.0f, 0.0f };
+    GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
+    GetCharacterHeadBox(character->GetPosition(), profile, headCenter, headSize);
+
+    const float leftEdge = std::min(
+        bodyCenter.x - bodySize.x * 0.5f,
+        headCenter.x - headSize.x * 0.5f
+    );
+    const float rightEdge = std::max(
+        bodyCenter.x + bodySize.x * 0.5f,
+        headCenter.x + headSize.x * 0.5f
+    );
+    const float headTop = headCenter.y + headSize.y * 0.5f;
+    const float platformLeft = oldPlatform.center.x - oldPlatform.size.x * 0.5f;
+    const float platformRight = oldPlatform.center.x + oldPlatform.size.x * 0.5f;
+    const float platformBottom = oldPlatform.center.y - oldPlatform.size.y * 0.5f;
+    const float platformNextBottom = platformBottom + requestedDeltaY;
+
+    const bool horizontallyOverlaps =
+        rightEdge > platformLeft + m_FootProbeInset &&
+        leftEdge < platformRight - m_FootProbeInset;
+    const float stopHeadY = headTop + DESCENDING_PLATFORM_HEAD_CLEARANCE;
+    const bool bottomCrossesHeadTop =
+        platformBottom >= stopHeadY - m_GroundSnapTolerance &&
+        platformNextBottom <= stopHeadY + m_GroundSnapTolerance;
+
+    if (!horizontallyOverlaps || !bottomCrossesHeadTop) {
+        return requestedDeltaY;
+    }
+
+    const float touchDeltaY = stopHeadY - platformBottom;
+    return std::max(requestedDeltaY, std::min(0.0f, touchDeltaY));
+}
+
 void App::CarryCharacterWithPlatform(
     const std::shared_ptr<HeadBodyCharacter>& character,
     const CharacterCollisionProfile& profile,
@@ -1843,18 +1928,27 @@ void App::CarryCharacterWithPlatform(
 
     glm::vec2 bodyCenter = { 0.0f, 0.0f };
     glm::vec2 bodySize = { 0.0f, 0.0f };
+    glm::vec2 headCenter = { 0.0f, 0.0f };
+    glm::vec2 headSize = { 0.0f, 0.0f };
     GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
+    GetCharacterHeadBox(character->GetPosition(), profile, headCenter, headSize);
 
-    const float bodyLeft = bodyCenter.x - bodySize.x * 0.5f;
-    const float bodyRight = bodyCenter.x + bodySize.x * 0.5f;
+    const float leftEdge = std::min(
+        bodyCenter.x - bodySize.x * 0.5f,
+        headCenter.x - headSize.x * 0.5f
+    );
+    const float rightEdge = std::max(
+        bodyCenter.x + bodySize.x * 0.5f,
+        headCenter.x + headSize.x * 0.5f
+    );
     const float feetY = bodyCenter.y - bodySize.y * 0.5f;
     const float platformLeft = oldPlatform.center.x - oldPlatform.size.x * 0.5f;
     const float platformRight = oldPlatform.center.x + oldPlatform.size.x * 0.5f;
     const float platformTop = oldPlatform.center.y + oldPlatform.size.y * 0.5f;
 
     const bool horizontallyOverlaps =
-        bodyRight > platformLeft + m_FootProbeInset &&
-        bodyLeft < platformRight - m_FootProbeInset;
+        rightEdge > platformLeft + m_FootProbeInset &&
+        leftEdge < platformRight - m_FootProbeInset;
     const bool standingOnPlatform =
         feetY >= platformTop - m_GroundStickTolerance &&
         feetY <= platformTop + m_GroundSnapTolerance;

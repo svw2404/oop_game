@@ -229,6 +229,13 @@ private:
         const SolidRect& oldPlatform,
         float platformDeltaY
     ) const;
+    float ClampDescendingPlatformDeltaAgainstCharacter(
+        const std::shared_ptr<HeadBodyCharacter>& character,
+        const CharacterCollisionProfile& profile,
+        const SolidRect& oldPlatform,
+        float requestedDeltaY,
+        std::size_t platformBlockIndex
+    ) const;
     void CarryCharacterWithCube(
         const std::shared_ptr<HeadBodyCharacter>& character,
         const CharacterCollisionProfile& profile,

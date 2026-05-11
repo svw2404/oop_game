@@ -152,6 +152,7 @@ private:
     void UpdateGreenSwitch();
     void UpdateGreenPlatform();
     void UpdateGreenPlatform2();
+    void UpdateLevel2HiddenPlatform();
     void UpdateCubePhysics();
     void ResolveCubeHorizontalCollisions(
         const SolidRect& oldCube,
@@ -248,6 +249,49 @@ private:
     void UpdateFireboyPhysics();
     void UpdateWatergirlPhysics();
     void CheckDiamondCollection();
+
+    // ------------------------------------------------------------------------
+    // Level building
+    // ------------------------------------------------------------------------
+    void BuildLevel1();
+    void BuildLevel2();
+    void AddCurrentSlopeGuardBands();
+    glm::vec2 ImageSizeToWorldSize(float imageWidth, float imageHeight, float scale = 1.0f) const;
+    std::shared_ptr<Character> AddPropAtBottom(
+        const std::string& path,
+        float centerXImage,
+        float bottomYImage,
+        float imageWidth,
+        float imageHeight,
+        float zIndex,
+        float scale = 1.0f
+    );
+    void AddAnimatedHazardInImageTrap(
+        const std::vector<std::string>& paths,
+        HazardRect::Type type,
+        float assetWidthImage,
+        float assetHeightImage,
+        float topLeftXImage,
+        float topLeftYImage,
+        float topRightXImage,
+        float topRightYImage,
+        float bottomLeftXImage,
+        float bottomLeftYImage,
+        float bottomRightXImage,
+        float bottomRightYImage,
+        float zIndex
+    );
+    void AddCollectibleDiamond(
+        const std::string& path,
+        DiamondType type,
+        float centerXImage,
+        float centerYImage,
+        float imageWidth,
+        float imageHeight,
+        float zIndex,
+        float scale = 1.0f,
+        bool required = false
+    );
 
     // ------------------------------------------------------------------------
     // Collision helpers
@@ -385,6 +429,9 @@ private:
     std::shared_ptr<Character> m_GreenButtonAfter;
     std::shared_ptr<Character> m_GreenButtonAfter2;
     std::shared_ptr<Character> m_GreenSwitch;
+    std::shared_ptr<Character> m_Level2HiddenPlatform;
+    std::shared_ptr<Character> m_Level2TopButtonLeft;
+    std::shared_ptr<Character> m_Level2TopButtonRight;
     std::shared_ptr<Character> m_Cube;
     ExitDoor m_FireboyDoor;
     ExitDoor m_WatergirlDoor;
@@ -408,6 +455,12 @@ private:
     glm::vec2 m_GreenButtonAfterBasePosition2 = { 0.0f, 0.0f };
     glm::vec2 m_GreenButtonAfterBaseSize = { 0.0f, 0.0f };
     glm::vec2 m_GreenButtonAfterBaseSize2 = { 0.0f, 0.0f };
+    float m_GreenPlatform2VisualCoverY = 0.0f;
+    glm::vec2 m_GreenPlatform2VisualSize = {0.0f, 0.0f};
+    glm::vec2 m_Level2HiddenPlatformVisualSize = {0.0f, 0.0f};
+    glm::vec2 m_Level2TopButtonLeftBasePosition = {0.0f, 0.0f};
+    glm::vec2 m_Level2TopButtonRightBasePosition = {0.0f, 0.0f};
+    glm::vec2 m_Level2TopButtonBaseSize = {0.0f, 0.0f};
     glm::vec2 m_FireboyDeathStartScale = {1.0f, 1.0f};
     glm::vec2 m_WatergirlDeathStartScale = {1.0f, 1.0f};
     glm::vec2 m_FireboyVictoryStartPosition = {0.0f, 0.0f};
@@ -463,6 +516,7 @@ private:
     int m_FireDiamondsTotal = 0;
     int m_WaterDiamondsTotal = 0;
     int m_GreenDiamondsTotal = 0;
+    int m_ActiveLevelIndex = 2;
 
     glm::vec2 m_BackgroundOriginalSize = {2380.0f, 1760.0f};
     glm::vec2 m_BackgroundDisplayedSize = {1244.16f, 699.84f};
@@ -487,14 +541,22 @@ private:
     SolidRect m_GreenButtonAfterHitbox;
     SolidRect m_GreenButtonAfterHitbox2;
     SolidRect m_GreenSwitchHitbox;
+    SolidRect m_Level2HiddenPlatformRestRect;
+    SolidRect m_Level2HiddenPlatformShownRect;
+    SolidRect m_Level2HiddenPlatformCurrentRect;
+    SolidRect m_Level2TopButtonLeftHitbox;
+    SolidRect m_Level2TopButtonRightHitbox;
     SolidRect m_CubeRect;
     SolidRect m_CubeSpawnRect;
     std::size_t m_GreenPlatformBlockIndex = 0;
     std::size_t m_GreenPlatformBlockIndex2 = 0;
+    std::size_t m_Level2HiddenPlatformBlockIndex = 0;
     std::size_t m_CubeBlockIndex = 0;
     bool m_HasGreenPlatformBlock = false;
     bool m_HasGreenPlatformBlock2 = false;
+    bool m_HasLevel2HiddenPlatformBlock = false;
     bool m_HasCubeBlock = false;
+    bool m_GreenPlatform2UseVerticalVisualClip = false;
     bool m_GreenButtonPressed = false;
     bool m_GreenSwitchOn = false;
     bool m_GreenSwitchTouchLatch = false;
@@ -512,6 +574,8 @@ private:
     float m_GreenButtonAnimSpeed = 0.10f;
     float m_GreenButtonAfterPressVisual = 0.0f;
     float m_GreenButtonAfterPressVisual2 = 0.0f;
+    float m_Level2TopButtonLeftPressVisual = 0.0f;
+    float m_Level2TopButtonRightPressVisual = 0.0f;
     VictoryPhase m_VictoryPhase = VictoryPhase::None;
     float m_VictoryTimer = 0.0f;
     float m_VictoryRunDuration = 0.30f;

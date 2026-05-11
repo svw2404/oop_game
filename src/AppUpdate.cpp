@@ -55,6 +55,7 @@ void App::Update() {
         UpdateGreenSwitch();
         UpdateGreenPlatform();
         UpdateGreenPlatform2();
+        UpdateLevel2HiddenPlatform();
         CheckHazards();
         UpdateDeathSequence();
 
@@ -1519,11 +1520,6 @@ bool App::FindNearbyCubeGroundY(
 }
 
 void App::UpdateGreenPlatform() {
-    // Old platform: controlled by switch only.
-    if (!m_GreenPlatform || !m_HasGreenPlatformBlock || m_GreenPlatformBlockIndex >= m_SolidBlocks.size()) {
-        return;
-    }
-
     const auto animateButtonPress = [&](const std::shared_ptr<Character>& button,
         bool pressed,
         const glm::vec2& basePosition,
@@ -1580,6 +1576,13 @@ void App::UpdateGreenPlatform() {
         m_GreenButtonAfterBaseSize2,
         m_GreenButtonAfterPressVisual2
     );
+
+    // Old platform: controlled by switch only. We still evaluate the button
+    // visuals/state above even if this platform does not exist, because Level 2
+    // reuses the same two-button logic for a different moving wall gate.
+    if (!m_GreenPlatform || !m_HasGreenPlatformBlock || m_GreenPlatformBlockIndex >= m_SolidBlocks.size()) {
+        return;
+    }
 
     const SolidRect oldPlatform = m_GreenPlatformCurrentRect;
     const float targetY = m_GreenSwitchOn
@@ -1660,11 +1663,219 @@ void App::UpdateGreenPlatform2() {
 
     m_GreenPlatformCurrentRect2.center.y += resolvedPlatformDeltaY;
     m_SolidBlocks[m_GreenPlatformBlockIndex2] = m_GreenPlatformCurrentRect2;
-    m_GreenPlatform2->SetPosition(m_GreenPlatformCurrentRect2.center);
+
+    if (m_GreenPlatform2UseVerticalVisualClip) {
+        m_GreenPlatform2->SetVisible(true);
+        m_GreenPlatform2->SetSize(m_GreenPlatform2VisualSize);
+        m_GreenPlatform2->SetPosition(m_GreenPlatformCurrentRect2.center);
+        m_GreenPlatform2->m_Transform.rotation = 1.57079632679f;
+    } else {
+        m_GreenPlatform2->SetVisible(true);
+        m_GreenPlatform2->SetSize({
+            m_GreenPlatformCurrentRect2.size.x,
+            m_GreenPlatformCurrentRect2.size.x * (107.0f / 333.0f),
+        });
+        m_GreenPlatform2->SetPosition(m_GreenPlatformCurrentRect2.center);
+        m_GreenPlatform2->m_Transform.rotation = 0.0f;
+    }
 
     CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldPlatform, resolvedPlatformDeltaY);
     CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldPlatform, resolvedPlatformDeltaY);
     CarryCubeWithPlatform(oldPlatform, resolvedPlatformDeltaY);
+}
+
+void App::UpdateLevel2HiddenPlatform() {
+    // Level 2-only hidden bridge:
+    // two top buttons reveal a horizontal platform that slides left out of the
+    // upper-right suspended block. This is separate from the vertical wall gate.
+    if (!m_Level2HiddenPlatform ||
+        !m_HasLevel2HiddenPlatformBlock ||
+        m_Level2HiddenPlatformBlockIndex >= m_SolidBlocks.size()) {
+        return;
+    }
+
+    const auto animateButtonPress = [&](const std::shared_ptr<Character>& button,
+        bool pressed,
+        const glm::vec2& basePosition,
+        const glm::vec2& baseSize,
+        float& pressVisual) {
+            if (!button) {
+                return;
+            }
+
+            const float targetVisual = pressed ? 1.0f : 0.0f;
+            const float deltaVisual = targetVisual - pressVisual;
+            const float stepVisual = std::abs(deltaVisual) <= m_GreenButtonAnimSpeed
+                ? deltaVisual
+                : std::copysign(m_GreenButtonAnimSpeed, deltaVisual);
+            pressVisual = std::clamp(pressVisual + stepVisual, 0.0f, 1.0f);
+
+            const float collapsedHeight = std::max(0.1f, baseSize.y * 0.01f);
+            const float currentHeight = baseSize.y + (collapsedHeight - baseSize.y) * pressVisual;
+            const float baseBottomY = basePosition.y - baseSize.y * 0.5f;
+            const float buriedBottomY = baseBottomY - m_GreenButtonPressDepth * pressVisual;
+
+            const bool fullyBuried = pressVisual >= 0.98f;
+            button->SetVisible(!fullyBuried);
+            button->SetSize({ baseSize.x, currentHeight });
+
+            glm::vec2 pos = basePosition;
+            pos.y = buriedBottomY + currentHeight * 0.5f;
+            button->SetPosition(pos);
+        };
+
+    const bool leftPressed =
+        CharacterPressesRectFromAbove(m_Fireboy, m_FireboyCollision, m_Level2TopButtonLeftHitbox) ||
+        CharacterPressesRectFromAbove(m_Watergirl, m_WatergirlCollision, m_Level2TopButtonLeftHitbox) ||
+        CubePressesRectFromAbove(m_Level2TopButtonLeftHitbox);
+    const bool rightPressed =
+        CharacterPressesRectFromAbove(m_Fireboy, m_FireboyCollision, m_Level2TopButtonRightHitbox) ||
+        CharacterPressesRectFromAbove(m_Watergirl, m_WatergirlCollision, m_Level2TopButtonRightHitbox) ||
+        CubePressesRectFromAbove(m_Level2TopButtonRightHitbox);
+
+    animateButtonPress(
+        m_Level2TopButtonLeft,
+        leftPressed,
+        m_Level2TopButtonLeftBasePosition,
+        m_Level2TopButtonBaseSize,
+        m_Level2TopButtonLeftPressVisual
+    );
+    animateButtonPress(
+        m_Level2TopButtonRight,
+        rightPressed,
+        m_Level2TopButtonRightBasePosition,
+        m_Level2TopButtonBaseSize,
+        m_Level2TopButtonRightPressVisual
+    );
+
+    const bool shouldShow = leftPressed || rightPressed;
+    const SolidRect oldPlatform = m_Level2HiddenPlatformCurrentRect;
+    const float targetX = shouldShow
+        ? m_Level2HiddenPlatformShownRect.center.x
+        : m_Level2HiddenPlatformRestRect.center.x;
+    const float deltaToTarget = targetX - m_Level2HiddenPlatformCurrentRect.center.x;
+    float resolvedDeltaX = std::abs(deltaToTarget) <= m_GreenPlatformSpeed
+        ? deltaToTarget
+        : std::copysign(m_GreenPlatformSpeed, deltaToTarget);
+
+    const auto clampPlatformAgainstCharacter = [&](const std::shared_ptr<HeadBodyCharacter>& character,
+                                                   const CharacterCollisionProfile& profile,
+                                                   float requestedDeltaX) {
+        if (!character || !character->IsAlive() || std::abs(requestedDeltaX) < 0.001f) {
+            return requestedDeltaX;
+        }
+
+        glm::vec2 bodyCenter = { 0.0f, 0.0f };
+        glm::vec2 bodySize = { 0.0f, 0.0f };
+        glm::vec2 headCenter = { 0.0f, 0.0f };
+        glm::vec2 headSize = { 0.0f, 0.0f };
+        GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
+        GetCharacterHeadBox(character->GetPosition(), profile, headCenter, headSize);
+
+        const float characterLeft = std::min(
+            bodyCenter.x - bodySize.x * 0.5f,
+            headCenter.x - headSize.x * 0.5f
+        );
+        const float characterRight = std::max(
+            bodyCenter.x + bodySize.x * 0.5f,
+            headCenter.x + headSize.x * 0.5f
+        );
+        const float characterBottom = bodyCenter.y - bodySize.y * 0.5f;
+        const float characterTop = std::max(
+            bodyCenter.y + bodySize.y * 0.5f,
+            headCenter.y + headSize.y * 0.5f
+        );
+
+        const float platformLeft = oldPlatform.center.x - oldPlatform.size.x * 0.5f;
+        const float platformRight = oldPlatform.center.x + oldPlatform.size.x * 0.5f;
+        const float platformTop = oldPlatform.center.y + oldPlatform.size.y * 0.5f;
+        const float platformBottom = oldPlatform.center.y - oldPlatform.size.y * 0.5f;
+
+        const bool verticalOverlap =
+            characterTop > platformBottom + 1.0f &&
+            characterBottom < platformTop - 1.0f;
+        if (!verticalOverlap) {
+            return requestedDeltaX;
+        }
+
+        constexpr float SIDE_CLEARANCE = 1.0f;
+        if (requestedDeltaX < 0.0f &&
+            characterRight <= platformLeft + m_FootProbeInset) {
+            const float maxLeftTravel = (characterRight + SIDE_CLEARANCE) - platformLeft;
+            return std::max(requestedDeltaX, maxLeftTravel);
+        }
+
+        if (requestedDeltaX > 0.0f &&
+            characterLeft >= platformRight - m_FootProbeInset) {
+            const float maxRightTravel = (characterLeft - SIDE_CLEARANCE) - platformRight;
+            return std::min(requestedDeltaX, maxRightTravel);
+        }
+
+        return requestedDeltaX;
+        };
+
+    resolvedDeltaX = clampPlatformAgainstCharacter(
+        m_Fireboy,
+        m_FireboyCollision,
+        resolvedDeltaX
+    );
+    resolvedDeltaX = clampPlatformAgainstCharacter(
+        m_Watergirl,
+        m_WatergirlCollision,
+        resolvedDeltaX
+    );
+
+    if (std::abs(resolvedDeltaX) >= 0.001f) {
+        m_Level2HiddenPlatformCurrentRect.center.x += resolvedDeltaX;
+        m_SolidBlocks[m_Level2HiddenPlatformBlockIndex] = m_Level2HiddenPlatformCurrentRect;
+    }
+
+    m_Level2HiddenPlatform->SetVisible(true);
+    m_Level2HiddenPlatform->SetSize(m_Level2HiddenPlatformVisualSize);
+    m_Level2HiddenPlatform->SetPosition(m_Level2HiddenPlatformCurrentRect.center);
+    m_Level2HiddenPlatform->m_Transform.rotation = 0.0f;
+
+    const auto carryCharacterHorizontally = [&](const std::shared_ptr<HeadBodyCharacter>& character,
+                                                const CharacterCollisionProfile& profile) {
+        if (!character || !character->IsAlive() || std::abs(resolvedDeltaX) < 0.001f) {
+            return;
+        }
+
+        glm::vec2 bodyCenter = { 0.0f, 0.0f };
+        glm::vec2 bodySize = { 0.0f, 0.0f };
+        GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
+
+        const float bodyLeft = bodyCenter.x - bodySize.x * 0.5f;
+        const float bodyRight = bodyCenter.x + bodySize.x * 0.5f;
+        const float feetY = bodyCenter.y - bodySize.y * 0.5f;
+        const float platformLeft = oldPlatform.center.x - oldPlatform.size.x * 0.5f;
+        const float platformRight = oldPlatform.center.x + oldPlatform.size.x * 0.5f;
+        const float platformTop = oldPlatform.center.y + oldPlatform.size.y * 0.5f;
+
+        const bool horizontallyOverlaps =
+            bodyRight > platformLeft + m_FootProbeInset &&
+            bodyLeft < platformRight - m_FootProbeInset;
+        const bool standingOnTop =
+            feetY >= platformTop - m_GroundStickTolerance &&
+            feetY <= platformTop + m_GroundSnapTolerance;
+
+        if (!horizontallyOverlaps || !standingOnTop) {
+            return;
+        }
+
+        const glm::vec2 carriedPos = character->GetPosition() + glm::vec2{resolvedDeltaX, 0.0f};
+        if (!WouldCharacterHitTerrainAt(
+            carriedPos,
+            profile,
+            true,
+            m_Level2HiddenPlatformBlockIndex
+        )) {
+            character->SetPosition(carriedPos);
+        }
+        };
+
+    carryCharacterHorizontally(m_Fireboy, m_FireboyCollision);
+    carryCharacterHorizontally(m_Watergirl, m_WatergirlCollision);
 }
 
 bool App::IsGreenButtonPressed() const {

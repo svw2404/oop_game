@@ -92,6 +92,10 @@ void App::Start() {
     m_GreenButtonAfter2.reset();
     m_GreenSwitch.reset();
     m_Level2HiddenPlatform.reset();
+    m_Level2HangingPlatform.reset();
+    m_Level2HangingPlatform2.reset();
+    m_Level2HangingChain.reset();
+    m_Level2HangingChain2.reset();
     m_Level2TopButtonLeft.reset();
     m_Level2TopButtonRight.reset();
     m_Cube.reset();
@@ -163,6 +167,8 @@ void App::Start() {
     m_Level2HiddenPlatformBlockIndex = 0;
     m_Level2TopButtonLeftPressVisual = 0.0f;
     m_Level2TopButtonRightPressVisual = 0.0f;
+    m_Level2HangingPlatformAngle = 0.0f;
+    m_Level2HangingPlatformAngle2 = 0.0f;
 
     if (!m_GameplayMusic) {
         m_GameplayMusic = std::make_unique<Util::BGM>(

@@ -153,6 +153,7 @@ private:
     void UpdateGreenPlatform();
     void UpdateGreenPlatform2();
     void UpdateLevel2HiddenPlatform();
+    void UpdateLevel2HangingPlatform();
     void UpdateCubePhysics();
     void ResolveCubeHorizontalCollisions(
         const SolidRect& oldCube,
@@ -430,6 +431,10 @@ private:
     std::shared_ptr<Character> m_GreenButtonAfter2;
     std::shared_ptr<Character> m_GreenSwitch;
     std::shared_ptr<Character> m_Level2HiddenPlatform;
+    std::shared_ptr<Character> m_Level2HangingPlatform;
+    std::shared_ptr<Character> m_Level2HangingPlatform2;
+    std::shared_ptr<Character> m_Level2HangingChain;
+    std::shared_ptr<Character> m_Level2HangingChain2;
     std::shared_ptr<Character> m_Level2TopButtonLeft;
     std::shared_ptr<Character> m_Level2TopButtonRight;
     std::shared_ptr<Character> m_Cube;
@@ -544,6 +549,8 @@ private:
     SolidRect m_Level2HiddenPlatformRestRect;
     SolidRect m_Level2HiddenPlatformShownRect;
     SolidRect m_Level2HiddenPlatformCurrentRect;
+    SolidRect m_Level2HangingPlatformRect;
+    SolidRect m_Level2HangingPlatformRect2;
     SolidRect m_Level2TopButtonLeftHitbox;
     SolidRect m_Level2TopButtonRightHitbox;
     SolidRect m_CubeRect;
@@ -551,10 +558,15 @@ private:
     std::size_t m_GreenPlatformBlockIndex = 0;
     std::size_t m_GreenPlatformBlockIndex2 = 0;
     std::size_t m_Level2HiddenPlatformBlockIndex = 0;
+    std::size_t m_Level2HangingPlatformBlockIndex = 0;
+    std::size_t m_Level2HangingPlatformSlopeIndex = 0;
+    std::size_t m_Level2HangingPlatformSlopeIndex2 = 0;
     std::size_t m_CubeBlockIndex = 0;
     bool m_HasGreenPlatformBlock = false;
     bool m_HasGreenPlatformBlock2 = false;
     bool m_HasLevel2HiddenPlatformBlock = false;
+    bool m_HasLevel2HangingPlatformBlock = false;
+    bool m_HasLevel2HangingPlatformSlope = false;
     bool m_HasCubeBlock = false;
     bool m_GreenPlatform2UseVerticalVisualClip = false;
     bool m_GreenButtonPressed = false;
@@ -576,6 +588,11 @@ private:
     float m_GreenButtonAfterPressVisual2 = 0.0f;
     float m_Level2TopButtonLeftPressVisual = 0.0f;
     float m_Level2TopButtonRightPressVisual = 0.0f;
+    float m_Level2HangingPlatformAngle = 0.0f;
+    float m_Level2HangingPlatformAngle2 = 0.0f;
+    float m_Level2HangingPlatformMaxAngle = 0.45f;
+    float m_Level2HangingPlatformTorqueScale = 0.015f;
+    float m_Level2HangingPlatformAngularSpeed = 1.6f;
     VictoryPhase m_VictoryPhase = VictoryPhase::None;
     float m_VictoryTimer = 0.0f;
     float m_VictoryRunDuration = 0.30f;

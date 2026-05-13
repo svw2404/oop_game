@@ -109,6 +109,77 @@ void App::BuildLevel2() {
 
     AddCurrentSlopeGuardBands();
 
+    // Level 2 hanging platforms (chain + wood platform).
+    constexpr float hangingPlatformCenterXImage = 1190.0f - 425.0f;
+    constexpr float hangingPlatformCenterXImage2 = (1412.0f + 1828.0f) * 0.5f;
+    constexpr float hangingPlatformCenterYImage = 880.0f - 160.0f;
+    constexpr float platformScale = 2.0f;
+    constexpr float chainScale = 0.6f;
+    const glm::vec2 platformSize = ImageSizeToWorldSize(103.0f, 17.0f, platformScale);
+    const glm::vec2 chainSize = ImageSizeToWorldSize(53.0f, 534.0f, chainScale);
+
+    auto addHangingPlatform = [&](
+        float centerXImage,
+        SolidRect& platformRect,
+        std::size_t& slopeIndex,
+        std::shared_ptr<Character>& platform,
+        std::shared_ptr<Character>& chain
+    ) {
+        const glm::vec2 platformCenter = ImagePointToWorldPoint(
+            centerXImage,
+            hangingPlatformCenterYImage
+        );
+        const float platformTop = platformCenter.y + platformSize.y * 0.5f;
+        const glm::vec2 chainCenter = {
+            platformCenter.x,
+            platformTop + chainSize.y * 0.5f
+        };
+        const float halfWidth = platformSize.x * 0.5f;
+        const float halfHeight = platformSize.y * 0.5f;
+
+        platformRect.center = platformCenter;
+        platformRect.size = platformSize;
+        platformRect.blockBottom = true;
+
+        slopeIndex = m_Slopes.size();
+        m_Slopes.push_back({
+            platformCenter + glm::vec2{ -halfWidth, halfHeight },
+            platformCenter + glm::vec2{ halfWidth, halfHeight },
+        });
+
+        platform = std::make_shared<Character>(
+            GA_RESOURCE_DIR "/Image/Assets/platform_wood.png"
+        );
+        platform->SetZIndex(6.8f);
+        platform->SetSize(platformSize);
+        platform->SetPosition(platformCenter);
+        m_Root.AddChild(platform);
+
+        chain = std::make_shared<Character>(
+            GA_RESOURCE_DIR "/Image/Assets/chain.png"
+        );
+        chain->SetZIndex(6.9f);
+        chain->SetSize(chainSize);
+        chain->SetPosition(chainCenter);
+        m_Root.AddChild(chain);
+    };
+
+    m_HasLevel2HangingPlatformSlope = true;
+    addHangingPlatform(
+        hangingPlatformCenterXImage,
+        m_Level2HangingPlatformRect,
+        m_Level2HangingPlatformSlopeIndex,
+        m_Level2HangingPlatform,
+        m_Level2HangingChain
+    );
+    addHangingPlatform(
+        hangingPlatformCenterXImage2,
+        m_Level2HangingPlatformRect2,
+        m_Level2HangingPlatformSlopeIndex2,
+        m_Level2HangingPlatform2,
+        m_Level2HangingChain2
+    );
+
     // Level 2 uses the second green-platform system as a vertical gate wall.
     // The wall starts in the center shaft, then rises upward into the upper
     // block when either of the two pressure buttons is held.

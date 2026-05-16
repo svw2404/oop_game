@@ -81,20 +81,17 @@ void App::BuildLevel3() {
     constexpr float rightLedgeLiquidBottomRightY = 810.0f;
     constexpr float rightLedgeBottomY = 836.0f;
 
-    constexpr float centerLeftShoulderLeft = 982.0f;
-    constexpr float centerLeftShoulderRight = 1174.0f;
-    constexpr float centerLeftShoulderTop = 653.0f;
-    constexpr float centerLeftShoulderBottom = 769.0f;
+    // Left shoulder geometry (imgX=982–1109, imgY=653–769) and right shoulder
+    // (imgX=1227–1412, imgY=644–771) are intentionally NOT added as solid blocks.
+    // Their slope guard bands provide all needed ground for those surfaces.
+    // A competing flat block top caused ApplySlopeFollow to fire a one-frame
+    // ~24 wu Y-pop whenever a character walked from the flat block onto the rising
+    // peak slope — the same X range, but two different Y values in the same frame.
 
     constexpr float centerTopCapLeft = 1165.0f;
     constexpr float centerTopCapRight = 1227.0f;
     constexpr float centerTopCapTop = 470.0f;
     constexpr float centerTopCapBottom = 653.0f;
-
-    constexpr float centerRightShoulderLeft = 1227.0f;
-    constexpr float centerRightShoulderRight = 1412.0f;
-    constexpr float centerRightShoulderTop = 644.0f;
-    constexpr float centerRightShoulderBottom = 771.0f;
 
     constexpr float centerStemLeft = 1109.0f;
     constexpr float centerStemRight = 1227.0f;
@@ -133,8 +130,9 @@ void App::BuildLevel3() {
 
     // ---------------------------------------------------------------------
     // Block 1: lower floor with two basins and a central climb.
-    // Note: the prompt text conflicts with background2 here. The image itself
-    // clearly shows left WATER and right LAVA, so we follow the background art.
+    // Latest level-design direction wins here:
+    // - left down = lava
+    // - right down = water
     // ---------------------------------------------------------------------
     m_LeftFloorSpawnRect = ImageRectToWorldRect(46.0f, 1702.0f, 366.0f, 1760.0f);
     m_SolidBlocks.push_back(m_LeftFloorSpawnRect);
@@ -145,7 +143,7 @@ void App::BuildLevel3() {
 
     // ---------------------------------------------------------------------
     // Block 2: right middle basin shelf.
-    // The prompt says lava, but the inspected background art shows WATER.
+    // Current direction keeps this upper-right pool as lava.
     // ---------------------------------------------------------------------
     m_SolidBlocks.push_back(ImageRectToWorldRect(1418.0f, 1328.0f, 1603.0f, 1389.0f));
     m_SolidBlocks.push_back(ImageRectToWorldRect(1603.0f, 1363.0f, 1979.0f, 1389.0f));
@@ -154,7 +152,7 @@ void App::BuildLevel3() {
 
     // ---------------------------------------------------------------------
     // Block 3: left middle basin shelf.
-    // The image shows this one as LAVA.
+    // Latest direction sets the upper-left pool to water.
     // ---------------------------------------------------------------------
     m_SolidBlocks.push_back(ImageRectToWorldRect(48.0f, 1206.0f, 170.0f, 1389.0f));
     m_SolidBlocks.push_back(ImageRectToWorldRect(166.0f, 1332.0f, 416.0f, 1389.0f));
@@ -210,17 +208,9 @@ void App::BuildLevel3() {
         rightLedgeLiquidRight, rightLedgeTopRightY, rightLedgeOuterRight, rightLedgeBottomY
     ));
 
-    // Center floating block support mass. The tops of these supports stay under
-    // the traced outer ramps, which avoids invisible walls while still keeping
-    // the block sealed from side/under overlaps.
+    // Center peak solid: topCap only. Shoulder blocks removed (see comment above).
     m_SolidBlocks.push_back(ImageRectToWorldRect(
         centerTopCapLeft, centerTopCapTop, centerTopCapRight, centerTopCapBottom
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        centerLeftShoulderLeft, centerLeftShoulderTop, centerLeftShoulderRight, centerLeftShoulderBottom
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        centerRightShoulderLeft, centerRightShoulderTop, centerRightShoulderRight, centerRightShoulderBottom
     ));
     m_SolidBlocks.push_back(ImageRectToWorldRect(
         centerStemLeft, centerStemTop, centerStemRight, centerStemBottom
@@ -264,27 +254,42 @@ void App::BuildLevel3() {
         {ImagePointToWorldPoint(609.0f, 778.0f), ImagePointToWorldPoint(669.0f, 808.0f)},
         {ImagePointToWorldPoint(789.0f, 810.0f), ImagePointToWorldPoint(857.0f, 776.0f)},
         {ImagePointToWorldPoint(857.0f, 776.0f), ImagePointToWorldPoint(982.0f, 653.0f)},
-        {ImagePointToWorldPoint(982.0f, 653.0f), ImagePointToWorldPoint(1165.0f, 470.0f)},
-        {ImagePointToWorldPoint(1227.0f, 470.0f), ImagePointToWorldPoint(1412.0f, 644.0f)},
+        // Both peak slopes share one endpoint at topCap center (imgX=1196, midpoint of 1165–1227).
+        // This eliminates the 62-px gap where neither slope owned the surface, stopping
+        // ApplySlopeFollow from extrapolating ~9 wu above the topCap block and oscillating.
+        {ImagePointToWorldPoint(982.0f, 653.0f), ImagePointToWorldPoint(1196.0f, 470.0f)},
+        {ImagePointToWorldPoint(1196.0f, 470.0f), ImagePointToWorldPoint(1412.0f, 644.0f)},
         {ImagePointToWorldPoint(1412.0f, 644.0f), ImagePointToWorldPoint(1296.0f, 766.0f)},
-        {ImagePointToWorldPoint(1296.0f, 766.0f), ImagePointToWorldPoint(1227.0f, 771.0f)},
-        {ImagePointToWorldPoint(1109.0f, 769.0f), ImagePointToWorldPoint(982.0f, 653.0f)},
+        // End pinned to centerStemTop: was 771 (0.8 wu below stem top 769), caused oscillation.
+        {ImagePointToWorldPoint(1296.0f, 766.0f), ImagePointToWorldPoint(1227.0f, centerStemTop)},
+        // Removed: {(1109,769)→(982,653)} — inner-left shoulder slope.
+        // It created a triple junction at (982,653) alongside the outer-left and
+        // left-peak slopes. The left-peak slope guard bands cover this zone.
         {ImagePointToWorldPoint(1542.0f, 776.0f), ImagePointToWorldPoint(1597.0f, 810.0f)},
         {ImagePointToWorldPoint(1725.0f, 810.0f), ImagePointToWorldPoint(1790.0f, 778.0f)},
 
-        // Block 6 lower supports
+        // Block 6 lower supports.
+        // Endpoint Y values pinned to adjacent surfaces so ResolveSlopeGrounding
+        // and the block-top detector agree at each seam and do not oscillate.
         {ImagePointToWorldPoint(baseBridgeBottomLeftX, baseBridgeBottomY), ImagePointToWorldPoint(baseBridgeTopLeftX, baseBridgeTopY)},
-        {ImagePointToWorldPoint(1037.0f, 1086.0f), ImagePointToWorldPoint(1171.0f, 961.0f)},
-        {ImagePointToWorldPoint(1227.0f, 958.0f), ImagePointToWorldPoint(1352.0f, 1081.0f)},
+        // Start pinned to baseBridgeTopY: was 1086 (0.8 wu below bridge), caused oscillation.
+        {ImagePointToWorldPoint(centerLowerLeftSupportLeft, baseBridgeTopY), ImagePointToWorldPoint(centerLowerLeftSupportRight, centerLowerLeftSupportTop)},
+        // End pinned to baseBridgeTopY: was 1081 (1.2 wu above bridge), caused pop.
+        {ImagePointToWorldPoint(centerLowerRightSupportLeft, centerLowerRightSupportTop), ImagePointToWorldPoint(centerLowerRightSupportRight, baseBridgeTopY)},
         {ImagePointToWorldPoint(baseBridgeTopRightX, 1086.0f), ImagePointToWorldPoint(baseBridgeBottomRightX, 1134.0f)},
     };
 
     AddCurrentSlopeGuardBands();
 
-    // Liquids. Again, the actual background art wins where the prompt notes
-    // and the traced text disagree.
+    // Liquids. Level 3 direction:
+    // - left up (center structure left ledge) = lava
+    // - left down (lower-left basin) = lava
+    // - right up (center structure right ledge) = water
+    // - right down (lower-right basin) = water
+    // - upper-left shelf (Block 3) = water
+    // - upper-right shelf (Block 2) = lava
     AddAnimatedHazardInImageTrap(
-        waterLargePaths, HazardRect::Type::Water,
+        lavaLargePaths, HazardRect::Type::Lava,
         360.0f, 80.0f,
         366.0f, 1702.0f,
         853.0f, 1704.0f,
@@ -293,7 +298,7 @@ void App::BuildLevel3() {
         10.2f
     );
     AddAnimatedHazardInImageTrap(
-        lavaLargePaths, HazardRect::Type::Lava,
+        waterLargePaths, HazardRect::Type::Water,
         360.0f, 80.0f,
         1536.0f, 1704.0f,
         2014.0f, 1708.0f,
@@ -302,7 +307,7 @@ void App::BuildLevel3() {
         10.2f
     );
     AddAnimatedHazardInImageTrap(
-        waterLargePaths, HazardRect::Type::Water,
+        lavaLargePaths, HazardRect::Type::Lava,
         360.0f, 80.0f,
         1544.0f, 1338.0f,
         2029.0f, 1328.0f,
@@ -311,7 +316,7 @@ void App::BuildLevel3() {
         10.2f
     );
     AddAnimatedHazardInImageTrap(
-        lavaLargePaths, HazardRect::Type::Lava,
+        waterLargePaths, HazardRect::Type::Water,
         360.0f, 80.0f,
         372.0f, 1332.0f,
         855.0f, 1334.0f,
@@ -319,22 +324,23 @@ void App::BuildLevel3() {
         796.0f, 1366.0f,
         10.2f
     );
+    // Upper-left small pool on center floating structure = lava per level design.
     AddAnimatedHazardInImageTrap(
         lavaPaths, HazardRect::Type::Lava,
         177.0f, 61.0f,
-        609.0f, 778.0f,
-        857.0f, 776.0f,
-        669.0f, 808.0f,
-        789.0f, 810.0f,
+        615.0f, 771.0f,
+        851.0f, 769.0f,
+        671.0f, 803.0f,
+        785.0f, 805.0f,
         10.2f
     );
     AddAnimatedHazardInImageTrap(
         waterPaths, HazardRect::Type::Water,
         178.0f, 60.0f,
-        1542.0f, 776.0f,
-        1790.0f, 778.0f,
-        1597.0f, 810.0f,
-        1725.0f, 810.0f,
+        1548.0f, 769.0f,
+        1784.0f, 771.0f,
+        1601.0f, 805.0f,
+        1721.0f, 805.0f,
         10.2f
     );
 

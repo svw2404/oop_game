@@ -21,6 +21,7 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(ptsd)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/PatchPTSD.cmake)
 
 file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS src/*.cpp)
 file(GLOB_RECURSE HEADER_FILES CONFIGURE_DEPENDS include/*.hpp)

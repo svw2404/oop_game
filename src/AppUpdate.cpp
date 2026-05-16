@@ -261,7 +261,14 @@ void App::HandleCharacterInput(
         velocity.x = 0.0f;
     }
     if (newPos.x != oldPos.x && velocity.y <= 0.0f) {
+        const float preSnapY = newPos.y;
         ApplySlopeFollow(oldPos, newPos, profile);
+        // Call 1 already handled downward slope follow. This second call exists
+        // to snap UP onto a slope after horizontal collision corrects X. Prevent
+        // it from undoing a step-up that ResolveHorizontalCollisions just performed.
+        if (newPos.y < preSnapY) {
+            newPos.y = preSnapY;
+        }
     }
     character->SetPosition(newPos);
 

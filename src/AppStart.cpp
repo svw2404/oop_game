@@ -471,14 +471,27 @@ void App::Start() {
         m_Watergirl->SetLifeState(HeadBodyCharacter::LifeState::Alive);
         m_Watergirl->SetMotionState(HeadBodyCharacter::MotionState::Idle);
 
-        const float floorTop = m_LeftFloorSpawnRect.center.y + (m_LeftFloorSpawnRect.size.y * 0.5f);
-        const float wallRight = m_LeftWallSpawnRect.center.x + (m_LeftWallSpawnRect.size.x * 0.5f);
-
         glm::vec2 spawnPos;
-        const float leftExtent = -GetWatergirlLeftEdge({0.0f, 0.0f});
         const float bodyBottom = GetWatergirlBodyBottom({0.0f, 0.0f});
-        spawnPos.x = wallRight + leftExtent + 45.0f;
-        spawnPos.y = floorTop - bodyBottom;
+        if (m_ActiveLevelIndex == 3) {
+            const SolidRect rightFloorSpawnRect =
+                ImageRectToWorldRect(2014.0f, 1702.0f, 2340.0f, 1760.0f);
+            const SolidRect rightWallSpawnRect =
+                ImageRectToWorldRect(2348.0f, 0.0f, 2380.0f, 1760.0f);
+            const float floorTop = rightFloorSpawnRect.center.y + (rightFloorSpawnRect.size.y * 0.5f);
+            const float wallLeft = rightWallSpawnRect.center.x - (rightWallSpawnRect.size.x * 0.5f);
+            const float rightExtent = GetWatergirlRightEdge({0.0f, 0.0f});
+
+            spawnPos.x = wallLeft - rightExtent - 45.0f;
+            spawnPos.y = floorTop - bodyBottom;
+        } else {
+            const float floorTop = m_LeftFloorSpawnRect.center.y + (m_LeftFloorSpawnRect.size.y * 0.5f);
+            const float wallRight = m_LeftWallSpawnRect.center.x + (m_LeftWallSpawnRect.size.x * 0.5f);
+            const float leftExtent = -GetWatergirlLeftEdge({0.0f, 0.0f});
+
+            spawnPos.x = wallRight + leftExtent + 45.0f;
+            spawnPos.y = floorTop - bodyBottom;
+        }
 
         m_Watergirl->SetPosition(spawnPos);
         m_WatergirlSpawnPosition = spawnPos;
@@ -853,7 +866,10 @@ void App::AddCurrentSlopeGuardBands() {
                     point.y + solidSideSign * (guardHeight * 0.5f - 0.35f),
                 };
                 guard.size = {guardWidth, guardHeight};
-                guard.blockBottom = true;
+                // Floor slope guards (solidSideSign < 0) must NOT block upward
+                // movement — they are ground supports only, not ceilings.
+                // Ceiling slope guards (solidSideSign > 0) do need blockBottom = true.
+                guard.blockBottom = (solidSideSign > 0.0f);
                 m_SolidBlocks.push_back(guard);
             }
 
@@ -864,7 +880,7 @@ void App::AddCurrentSlopeGuardBands() {
                     endpoint.y + solidSideSign * (endpointGuardSize * 0.5f - 0.35f),
                 };
                 endpointGuard.size = {endpointGuardSize, endpointGuardSize};
-                endpointGuard.blockBottom = true;
+                endpointGuard.blockBottom = (solidSideSign > 0.0f);
                 m_SolidBlocks.push_back(endpointGuard);
             }
         }

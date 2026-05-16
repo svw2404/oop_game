@@ -122,6 +122,12 @@ private:
         std::shared_ptr<OverlayText> labelObject;
     };
 
+    struct FanProp {
+        std::shared_ptr<Util::GameObject> sprite;
+        SolidRect windZone;
+        glm::vec2 windVelocityDelta = {0.0f, 0.0f};
+    };
+
     // ------------------------------------------------------------------------
     // Core gameplay steps
     // ------------------------------------------------------------------------
@@ -154,6 +160,7 @@ private:
     void UpdateGreenPlatform2();
     void UpdateLevel2HiddenPlatform();
     void UpdateLevel2HangingPlatform();
+    void UpdateFans();
     void UpdateCubePhysics();
     void ResolveCubeHorizontalCollisions(
         const SolidRect& oldCube,
@@ -256,6 +263,7 @@ private:
     // ------------------------------------------------------------------------
     void BuildLevel1();
     void BuildLevel2();
+    void BuildLevel3();
     void AddCurrentSlopeGuardBands();
     glm::vec2 ImageSizeToWorldSize(float imageWidth, float imageHeight, float scale = 1.0f) const;
     std::shared_ptr<Character> AddPropAtBottom(
@@ -445,6 +453,7 @@ private:
     std::vector<std::shared_ptr<Util::GameObject>> m_FailOverlayObjects;
     std::vector<std::shared_ptr<Util::GameObject>> m_VictoryOverlayObjects;
     std::vector<CollectibleDiamond> m_Diamonds;
+    std::vector<FanProp> m_Fans;
 
     // ------------------------------------------------------------------------
     // Physics parameters
@@ -521,7 +530,7 @@ private:
     int m_FireDiamondsTotal = 0;
     int m_WaterDiamondsTotal = 0;
     int m_GreenDiamondsTotal = 0;
-    int m_ActiveLevelIndex = 2;
+    int m_ActiveLevelIndex = 3;
 
     glm::vec2 m_BackgroundOriginalSize = {2380.0f, 1760.0f};
     glm::vec2 m_BackgroundDisplayedSize = {1244.16f, 699.84f};

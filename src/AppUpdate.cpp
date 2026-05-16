@@ -57,6 +57,7 @@ void App::Update() {
         UpdateGreenPlatform2();
         UpdateLevel2HiddenPlatform();
         UpdateLevel2HangingPlatform();
+        UpdateFans();
         CheckHazards();
         UpdateDeathSequence();
 
@@ -116,6 +117,43 @@ void App::HandleWatergirlInput() {
         m_WatergirlCeilingCarryTimer,
         m_WatergirlCeilingCarrySpeed
     );
+}
+
+void App::UpdateFans() {
+    if (m_Fans.empty()) {
+        return;
+    }
+
+    constexpr float FAN_MAX_HORIZONTAL_SPEED = 2.8f;
+    constexpr float FAN_MAX_VERTICAL_SPEED = 3.2f;
+
+    auto applyWind = [&](const std::shared_ptr<HeadBodyCharacter>& character,
+                         const CharacterCollisionProfile& profile,
+                         glm::vec2& velocity) {
+        if (!character || !character->IsAlive()) {
+            return;
+        }
+
+        for (const auto& fan : m_Fans) {
+            if (!CharacterTouchesRect(character, profile, fan.windZone)) {
+                continue;
+            }
+
+            velocity.x = std::clamp(
+                velocity.x + fan.windVelocityDelta.x,
+                -FAN_MAX_HORIZONTAL_SPEED,
+                FAN_MAX_HORIZONTAL_SPEED
+            );
+            velocity.y = std::clamp(
+                velocity.y + fan.windVelocityDelta.y,
+                -FAN_MAX_VERTICAL_SPEED,
+                FAN_MAX_VERTICAL_SPEED
+            );
+        }
+    };
+
+    applyWind(m_Fireboy, m_FireboyCollision, m_FireboyVelocity);
+    applyWind(m_Watergirl, m_WatergirlCollision, m_WatergirlVelocity);
 }
 
 void App::HandleCharacterInput(

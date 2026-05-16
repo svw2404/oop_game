@@ -83,6 +83,7 @@ void App::Start() {
     m_Slopes.clear();
     m_CeilingSlopes.clear();
     m_Hazards.clear();
+    m_Fans.clear();
     m_LevelProps.clear();
     m_AnimatedLevelProps.clear();
     m_FailOverlayObjects.clear();
@@ -164,7 +165,12 @@ void App::Start() {
     m_FinishMusicPlayed = false;
     m_GreenPlatform2UseVerticalVisualClip = false;
     m_HasLevel2HiddenPlatformBlock = false;
+    m_HasLevel2HangingPlatformBlock = false;
+    m_HasLevel2HangingPlatformSlope = false;
     m_Level2HiddenPlatformBlockIndex = 0;
+    m_Level2HangingPlatformBlockIndex = 0;
+    m_Level2HangingPlatformSlopeIndex = 0;
+    m_Level2HangingPlatformSlopeIndex2 = 0;
     m_Level2TopButtonLeftPressVisual = 0.0f;
     m_Level2TopButtonRightPressVisual = 0.0f;
     m_Level2HangingPlatformAngle = 0.0f;
@@ -186,7 +192,9 @@ void App::Start() {
         );
     }
 
-    if (m_ActiveLevelIndex == 2) {
+    if (m_ActiveLevelIndex == 3) {
+        BuildLevel3();
+    } else if (m_ActiveLevelIndex == 2) {
         BuildLevel2();
     } else {
         BuildLevel1();

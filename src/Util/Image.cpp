@@ -1,9 +1,5 @@
 #include "Util/Image.hpp"
 
 namespace Util {
-
-void Image::SetSize(const glm::vec2& size) {
-    m_Size = size;
-}
-
+// Image::SetSize is inline in the current PTSD header.
 } // namespace Util

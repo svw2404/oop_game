@@ -49,6 +49,7 @@ public:
 class App {
 public:
     enum class State {
+        LEVEL_SELECT,
         START,
         UPDATE,
         END,
@@ -57,6 +58,7 @@ public:
     [[nodiscard]] State GetCurrentState() const { return m_CurrentState; }
 
     // 主流程
+    void UpdateLevelSelect();
     void Start();
     void Update();
     void End();
@@ -120,6 +122,12 @@ private:
         std::string futureAssetPath;
         SolidRect rect;
         std::shared_ptr<OverlayText> labelObject;
+    };
+
+    struct LevelSelectButton {
+        int levelIndex = 1;
+        SolidRect rect;
+        std::shared_ptr<Character> sprite;
     };
 
     struct FanProp {
@@ -420,7 +428,7 @@ private:
     // ------------------------------------------------------------------------
     // App state
     // ------------------------------------------------------------------------
-    State m_CurrentState = State::START;
+    State m_CurrentState = State::LEVEL_SELECT;
     Util::Renderer m_Root;
 
     // ------------------------------------------------------------------------
@@ -454,6 +462,8 @@ private:
     std::vector<std::shared_ptr<Util::GameObject>> m_VictoryOverlayObjects;
     std::vector<CollectibleDiamond> m_Diamonds;
     std::vector<FanProp> m_Fans;
+    std::shared_ptr<BackgroundImage> m_LevelSelectBackground;
+    std::vector<LevelSelectButton> m_LevelSelectButtons;
 
     // ------------------------------------------------------------------------
     // Physics parameters
@@ -577,6 +587,8 @@ private:
     bool m_HasLevel2HangingPlatformBlock = false;
     bool m_HasLevel2HangingPlatformSlope = false;
     bool m_HasCubeBlock = false;
+    bool m_LevelSelectBuilt = false;
+    bool m_LevelSelectMouseLatch = false;
     bool m_GreenPlatform2UseVerticalVisualClip = false;
     bool m_GreenButtonPressed = false;
     bool m_GreenSwitchOn = false;

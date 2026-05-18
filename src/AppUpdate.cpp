@@ -730,8 +730,8 @@ void App::UpdateFailOverlayVisuals() {
 }
 
 void App::UpdateFailOverlay() {
-    // Fail overlay is the current "game over" state for Level 1. Restart and
-    // Exit are real; Home is still routed to Start() until a menu state exists.
+    // Fail overlay is the current "game over" state. Restart reloads the same
+    // level, while Home returns to the level select screen.
     m_FailOverlayVisible = AreBothCharactersDead();
     UpdateFailOverlayVisuals();
 
@@ -753,8 +753,7 @@ void App::UpdateFailOverlay() {
         m_CurrentState = State::START;
         break;
     case FailOverlayAction::Home:
-        // TODO: route this to a proper home/menu state once one exists.
-        m_CurrentState = State::START;
+        m_CurrentState = State::LEVEL_SELECT;
         break;
     case FailOverlayAction::Exit:
         m_CurrentState = State::END;

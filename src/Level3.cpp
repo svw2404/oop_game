@@ -344,6 +344,95 @@ void App::BuildLevel3() {
         10.2f
     );
 
+    const float propScale = 1.0f / 1.5f;
+    const float doorScale = propScale * 1.6f;
+    const float centerDoorFloorYImage = baseBridgeTopY;
+
+    m_FireboyDoor.closedImagePath =
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_closed.png";
+    m_FireboyDoor.openingImagePaths = {
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_opening_00.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_opening_01.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_opening_02.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/lavaboy_door_opening_03.png",
+    };
+    m_FireboyDoor.sprite = AddPropAtBottom(
+        m_FireboyDoor.closedImagePath,
+        770.0f, centerDoorFloorYImage, 160.0f, 205.0f, 7.2f, doorScale
+    );
+    const glm::vec2 fireboyDoorSize = ImageSizeToWorldSize(160.0f, 205.0f, doorScale);
+    m_FireboyDoor.triggerRect.center = m_FireboyDoor.sprite->GetPosition() + glm::vec2{
+        0.0f,
+        -fireboyDoorSize.y * 0.14f,
+    };
+    m_FireboyDoor.triggerRect.size = {
+        fireboyDoorSize.x * 0.46f,
+        fireboyDoorSize.y * 0.72f,
+    };
+
+    m_WatergirlDoor.closedImagePath =
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/watergirl_door_closed.png";
+    m_WatergirlDoor.openingImagePaths = {
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/watergirl_door_opening_00.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/watergirl_door_opening_01.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/watergirl_door_opening_02.png",
+        std::string(GA_RESOURCE_DIR) + "/Image/Assets/watergirl_door_opening_03.png",
+    };
+    m_WatergirlDoor.sprite = AddPropAtBottom(
+        m_WatergirlDoor.closedImagePath,
+        1636.0f, centerDoorFloorYImage, 162.0f, 205.0f, 7.2f, doorScale
+    );
+    const glm::vec2 watergirlDoorSize = ImageSizeToWorldSize(162.0f, 205.0f, doorScale);
+    m_WatergirlDoor.triggerRect.center = m_WatergirlDoor.sprite->GetPosition() + glm::vec2{
+        watergirlDoorSize.x * 0.02f,
+        -watergirlDoorSize.y * 0.10f,
+    };
+    m_WatergirlDoor.triggerRect.size = {
+        watergirlDoorSize.x * 0.60f,
+        watergirlDoorSize.y * 0.82f,
+    };
+
+    const float diamondScale = propScale * 0.90f;
+    auto addBlueDiamond = [&](float centerXImage, float centerYImage) {
+        AddCollectibleDiamond(
+            std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_blue.png",
+            DiamondType::Water,
+            centerXImage, centerYImage, 117.0f, 111.0f, 8.4f, diamondScale
+        );
+    };
+    auto addRedDiamond = [&](float centerXImage, float centerYImage) {
+        AddCollectibleDiamond(
+            std::string(GA_RESOURCE_DIR) + "/Image/Assets/diamond_red.png",
+            DiamondType::Fire,
+            centerXImage, centerYImage, 121.0f, 111.0f, 8.4f, diamondScale
+        );
+    };
+
+    // Level 3 diamonds mapped from the original layout reference.
+    addBlueDiamond(129.5f, 335.0f);
+    addBlueDiamond(129.5f, 532.0f);
+    addBlueDiamond(129.5f, 715.0f);
+    addBlueDiamond(771.0f, 156.0f);
+    addBlueDiamond(951.0f, 594.0f);
+    addBlueDiamond(1676.0f, 720.0f);
+    addBlueDiamond(519.0f, 1278.0f);
+    addBlueDiamond(713.0f, 1278.0f);
+    addBlueDiamond(1499.0f, 1581.0f);
+    addBlueDiamond(1679.0f, 1658.0f);
+    addBlueDiamond(1924.0f, 1658.0f);
+
+    addRedDiamond(1620.0f, 156.0f);
+    addRedDiamond(2265.5f, 335.0f);
+    addRedDiamond(2265.5f, 532.0f);
+    addRedDiamond(2265.5f, 715.0f);
+    addRedDiamond(711.0f, 720.0f);
+    addRedDiamond(1435.0f, 594.0f);
+    addRedDiamond(1629.0f, 1278.0f);
+    addRedDiamond(1859.0f, 1278.0f);
+    addRedDiamond(896.0f, 1581.0f);
+    addRedDiamond(528.0f, 1658.0f);
+    addRedDiamond(711.0f, 1658.0f);
+
     // Side fans pushing inward across the middle chamber.
     {
         auto leftFanAnimation = std::make_shared<Util::Animation>(fanPaths, true, 125, true, 0);

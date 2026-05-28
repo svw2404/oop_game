@@ -866,6 +866,7 @@ void App::AddCurrentSlopeGuardBands() {
                     point.y + solidSideSign * (guardHeight * 0.5f - 0.35f),
                 };
                 guard.size = {guardWidth, guardHeight};
+                guard.isSlopeGuard = true;
                 // Floor slope guards (solidSideSign < 0) must NOT block upward
                 // movement — they are ground supports only, not ceilings.
                 // Ceiling slope guards (solidSideSign > 0) do need blockBottom = true.
@@ -880,6 +881,7 @@ void App::AddCurrentSlopeGuardBands() {
                     endpoint.y + solidSideSign * (endpointGuardSize * 0.5f - 0.35f),
                 };
                 endpointGuard.size = {endpointGuardSize, endpointGuardSize};
+                endpointGuard.isSlopeGuard = true;
                 endpointGuard.blockBottom = (solidSideSign > 0.0f);
                 m_SolidBlocks.push_back(endpointGuard);
             }

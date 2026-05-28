@@ -81,6 +81,18 @@ void App::BuildLevel3() {
     constexpr float rightLedgeLiquidBottomRightY = 810.0f;
     constexpr float rightLedgeBottomY = 836.0f;
 
+    // Fill the shoulder mass under the peak, but keep that fill lower than the
+    // visible ramp shell so it seals the object without flattening the slope.
+    constexpr float centerLeftShoulderFillLeft = 982.0f;
+    constexpr float centerLeftShoulderFillRight = 1109.0f;
+    constexpr float centerLeftShoulderFillTop = 690.0f;
+    constexpr float centerLeftShoulderFillBottom = 769.0f;
+
+    constexpr float centerRightShoulderFillLeft = 1227.0f;
+    constexpr float centerRightShoulderFillRight = 1412.0f;
+    constexpr float centerRightShoulderFillTop = 684.0f;
+    constexpr float centerRightShoulderFillBottom = 771.0f;
+
     // Left shoulder geometry (imgX=982–1109, imgY=653–769) and right shoulder
     // (imgX=1227–1412, imgY=644–771) are intentionally NOT added as solid blocks.
     // Their slope guard bands provide all needed ground for those surfaces.
@@ -208,25 +220,32 @@ void App::BuildLevel3() {
         rightLedgeLiquidRight, rightLedgeTopRightY, rightLedgeOuterRight, rightLedgeBottomY
     ));
 
-    // Center peak solid: topCap only. Shoulder blocks removed (see comment above).
+    // Center peak solid: top cap + stem + low underfills inside the shoulders.
     m_SolidBlocks.push_back(ImageRectToWorldRect(
         centerTopCapLeft, centerTopCapTop, centerTopCapRight, centerTopCapBottom
     ));
     m_SolidBlocks.push_back(ImageRectToWorldRect(
+        centerLeftShoulderFillLeft,
+        centerLeftShoulderFillTop,
+        centerLeftShoulderFillRight,
+        centerLeftShoulderFillBottom,
+        false
+    ));
+    m_SolidBlocks.push_back(ImageRectToWorldRect(
+        centerRightShoulderFillLeft,
+        centerRightShoulderFillTop,
+        centerRightShoulderFillRight,
+        centerRightShoulderFillBottom,
+        false
+    ));
+    m_SolidBlocks.push_back(ImageRectToWorldRect(
         centerStemLeft, centerStemTop, centerStemRight, centerStemBottom
     ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        centerLowerLeftSupportLeft,
-        centerLowerLeftSupportTop,
-        centerLowerLeftSupportRight,
-        centerLowerLeftSupportBottom
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        centerLowerRightSupportLeft,
-        centerLowerRightSupportTop,
-        centerLowerRightSupportRight,
-        centerLowerRightSupportBottom
-    ));
+    // Do not fill the lower support ramps with flat-topped rectangles.
+    // Those tops sit above the visible diagonal shell across most of their width
+    // and create uphill-only snags / pops when characters try to climb Level 3.
+    // The bridge, stem, ramp slopes, guard bands, and underside blocking are
+    // enough to keep this mass sealed without flattening the ramps.
 
     // Long connected base below the floating center.
     m_SolidBlocks.push_back(ImageRectToWorldRect(
@@ -236,18 +255,18 @@ void App::BuildLevel3() {
     m_Slopes = {
         // Block 1
         {ImagePointToWorldPoint(366.0f, 1702.0f), ImagePointToWorldPoint(418.0f, 1737.0f)},
-        {ImagePointToWorldPoint(796.0f, 1742.0f), ImagePointToWorldPoint(853.0f, 1704.0f)},
+        {ImagePointToWorldPoint(796.0f, 1737.0f), ImagePointToWorldPoint(853.0f, 1704.0f)},
         {ImagePointToWorldPoint(853.0f, 1704.0f), ImagePointToWorldPoint(1040.0f, 1519.0f)},
-        {ImagePointToWorldPoint(1353.0f, 1523.0f), ImagePointToWorldPoint(1536.0f, 1704.0f)},
-        {ImagePointToWorldPoint(1536.0f, 1704.0f), ImagePointToWorldPoint(1599.0f, 1735.0f)},
-        {ImagePointToWorldPoint(1968.0f, 1731.0f), ImagePointToWorldPoint(2014.0f, 1708.0f)},
+        {ImagePointToWorldPoint(1353.0f, 1519.0f), ImagePointToWorldPoint(1536.0f, 1704.0f)},
+        {ImagePointToWorldPoint(1536.0f, 1704.0f), ImagePointToWorldPoint(1599.0f, 1731.0f)},
+        {ImagePointToWorldPoint(1968.0f, 1731.0f), ImagePointToWorldPoint(2014.0f, 1702.0f)},
 
         // Block 2
-        {ImagePointToWorldPoint(1544.0f, 1338.0f), ImagePointToWorldPoint(1603.0f, 1368.0f)},
+        {ImagePointToWorldPoint(1544.0f, 1338.0f), ImagePointToWorldPoint(1603.0f, 1363.0f)},
         {ImagePointToWorldPoint(1979.0f, 1363.0f), ImagePointToWorldPoint(2029.0f, 1328.0f)},
 
         // Block 3
-        {ImagePointToWorldPoint(372.0f, 1332.0f), ImagePointToWorldPoint(416.0f, 1368.0f)},
+        {ImagePointToWorldPoint(372.0f, 1332.0f), ImagePointToWorldPoint(416.0f, 1366.0f)},
         {ImagePointToWorldPoint(796.0f, 1366.0f), ImagePointToWorldPoint(855.0f, 1334.0f)},
 
         // Block 6 upper ledges and peak
@@ -276,7 +295,7 @@ void App::BuildLevel3() {
         {ImagePointToWorldPoint(centerLowerLeftSupportLeft, baseBridgeTopY), ImagePointToWorldPoint(centerLowerLeftSupportRight, centerLowerLeftSupportTop)},
         // End pinned to baseBridgeTopY: was 1081 (1.2 wu above bridge), caused pop.
         {ImagePointToWorldPoint(centerLowerRightSupportLeft, centerLowerRightSupportTop), ImagePointToWorldPoint(centerLowerRightSupportRight, baseBridgeTopY)},
-        {ImagePointToWorldPoint(baseBridgeTopRightX, 1086.0f), ImagePointToWorldPoint(baseBridgeBottomRightX, 1134.0f)},
+        {ImagePointToWorldPoint(baseBridgeTopRightX, baseBridgeTopY), ImagePointToWorldPoint(baseBridgeBottomRightX, baseBridgeBottomY)},
     };
 
     AddCurrentSlopeGuardBands();

@@ -604,7 +604,7 @@ private:
     float m_CubePushAcceleration = 0.10f;
     float m_CubeDeceleration = 0.08f;
     float m_GreenButtonPressDepth = 7.5f;
-    float m_GreenButtonAnimSpeed = 0.10f;
+    float m_GreenButtonAnimSpeed = 0.28f;
     float m_GreenButtonAfterPressVisual = 0.0f;
     float m_GreenButtonAfterPressVisual2 = 0.0f;
     float m_Level2TopButtonLeftPressVisual = 0.0f;

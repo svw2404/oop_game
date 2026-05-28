@@ -251,7 +251,7 @@ void App::HandleCharacterInput(
 
     // Keep the player glued to slope surfaces while walking so the terrain
     // behaves like a real ramp instead of a staircase of tiny rectangles.
-    if (newPos.x != oldPos.x && velocity.y <= 0.0f) {
+    if (onGround && newPos.x != oldPos.x) {
         ApplySlopeFollow(oldPos, newPos, profile);
     }
 
@@ -260,7 +260,7 @@ void App::HandleCharacterInput(
     if (std::abs(newPos.x - attemptedX) > 0.001f) {
         velocity.x = 0.0f;
     }
-    if (newPos.x != oldPos.x && velocity.y <= 0.0f) {
+    if (onGround && newPos.x != oldPos.x) {
         const float preSnapY = newPos.y;
         ApplySlopeFollow(oldPos, newPos, profile);
         // Call 1 already handled downward slope follow. This second call exists

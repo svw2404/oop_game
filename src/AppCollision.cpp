@@ -234,6 +234,9 @@ bool App::WouldCharacterHitTerrainAt(
         }
 
         const SolidRect& block = m_SolidBlocks[i];
+        if (block.isSlopeGuard) {
+            continue;
+        }
         if (!CheckCharacterCollision(bodyPos, block, profile)) {
             continue;
         }
@@ -263,13 +266,21 @@ void App::ResolveHorizontalCollisions(
     glm::vec2 oldBodySize;
     GetCharacterBodyBox(oldPos, profile, oldBodyCenter, oldBodySize);
     const float bodyBottomOffset = oldPos.y - oldBottom;
+    float currentGroundY = 0.0f;
+    const bool nearGroundForStepAssist =
+        FindNearbyGroundY(oldPos, m_GroundStickTolerance + m_GroundSnapTolerance, currentGroundY, profile) &&
+        oldBottom >= currentGroundY - m_GroundSnapTolerance &&
+        oldBottom <= currentGroundY + m_GroundStickTolerance;
 
     for (const auto& block : m_SolidBlocks) {
+        if (block.isSlopeGuard) {
+            continue;
+        }
         if (!CheckCharacterCollision(newPos, block, profile)) {
             continue;
         }
 
-        if (TrySnapToSlopeTopTransition(oldPos, newPos, block, profile)) {
+        if (nearGroundForStepAssist && TrySnapToSlopeTopTransition(oldPos, newPos, block, profile)) {
             continue;
         }
 
@@ -297,6 +308,9 @@ void App::ResolveHorizontalCollisions(
                 if (&other == &block) {
                     continue;
                 }
+                if (other.isSlopeGuard) {
+                    continue;
+                }
 
                 const bool bodyOverlap = CheckAABB(
                     candidateBodyCenter,
@@ -315,6 +329,12 @@ void App::ResolveHorizontalCollisions(
                 }
 
                 const float otherTop = other.center.y + other.size.y * 0.5f;
+                const bool embeddedSupportMass =
+                    !other.blockBottom &&
+                    candidateBottom > otherTop + m_GroundSnapTolerance;
+                if (embeddedSupportMass) {
+                    continue;
+                }
                 const bool isSupportContact =
                     candidateBottom >= otherTop - m_GroundSnapTolerance &&
                     candidateBottom <= otherTop + m_SlopeSnapTolerance;
@@ -358,6 +378,9 @@ void App::ResolveHorizontalCollisions(
             const float candidateBottom = candidateBodyCenter.y - candidateBodySize.y * 0.5f;
 
             for (const auto& other : m_SolidBlocks) {
+                if (other.isSlopeGuard) {
+                    continue;
+                }
                 const bool bodyOverlap = CheckAABB(
                     candidateBodyCenter,
                     candidateBodySize,
@@ -375,6 +398,12 @@ void App::ResolveHorizontalCollisions(
                 }
 
                 const float otherTop = other.center.y + other.size.y * 0.5f;
+                const bool embeddedSupportMass =
+                    !other.blockBottom &&
+                    candidateBottom > otherTop + m_GroundSnapTolerance;
+                if (embeddedSupportMass) {
+                    continue;
+                }
                 const bool isSupportContact =
                     candidateBottom >= otherTop - m_GroundSnapTolerance &&
                     candidateBottom <= otherTop + m_SlopeSnapTolerance;
@@ -388,13 +417,13 @@ void App::ResolveHorizontalCollisions(
         };
 
         if (newPos.x > oldPos.x && oldRight <= blockLeft + m_GroundSnapTolerance) {
-            if (!canStepUp(blockTop) && !canStepToNearbyGround()) {
+            if (!nearGroundForStepAssist || (!canStepUp(blockTop) && !canStepToNearbyGround())) {
                 const float rightOffset = oldPos.x - oldRight;
                 newPos.x = blockLeft + rightOffset;
             }
         }
         else if (newPos.x < oldPos.x && oldLeft >= blockRight - m_GroundSnapTolerance) {
-            if (!canStepUp(blockTop) && !canStepToNearbyGround()) {
+            if (!nearGroundForStepAssist || (!canStepUp(blockTop) && !canStepToNearbyGround())) {
                 const float leftOffset = oldPos.x - oldLeft;
                 newPos.x = blockRight + leftOffset;
             }
@@ -415,25 +444,30 @@ void App::ResolveVerticalCollisions(
 
     bool foundGround = false;
     float bestGroundY = -std::numeric_limits<float>::infinity();
+    glm::vec2 oldBodyCenter;
+    glm::vec2 oldBodySize;
+    glm::vec2 oldHeadCenter;
+    glm::vec2 oldHeadSize;
+    glm::vec2 newBodyCenter;
+    glm::vec2 newBodySize;
+    GetCharacterBodyBox(oldPos, profile, oldBodyCenter, oldBodySize);
+    GetCharacterHeadBox(oldPos, profile, oldHeadCenter, oldHeadSize);
+    GetCharacterBodyBox(newPos, profile, newBodyCenter, newBodySize);
 
     for (const auto& block : m_SolidBlocks) {
         if (!CheckCharacterCollision(newPos, block, profile)) {
             continue;
         }
 
-        glm::vec2 bodyCenter;
-        glm::vec2 bodySize;
-        glm::vec2 headCenter;
-        glm::vec2 headSize;
-        GetCharacterBodyBox(oldPos, profile, bodyCenter, bodySize);
-        GetCharacterHeadBox(oldPos, profile, headCenter, headSize);
-
-        const float oldBottom = bodyCenter.y - bodySize.y * 0.5f;
-        const float oldTop = headCenter.y + headSize.y * 0.5f;
+        const float oldBottom = oldBodyCenter.y - oldBodySize.y * 0.5f;
+        const float newBottom = newBodyCenter.y - newBodySize.y * 0.5f;
+        const float oldTop = oldHeadCenter.y + oldHeadSize.y * 0.5f;
         const float blockTop = block.center.y + block.size.y * 0.5f;
         const float blockBottom = block.center.y - block.size.y * 0.5f;
 
-        if (velocity.y <= 0.0f && oldBottom >= blockTop - m_GroundSnapTolerance) {
+        if (velocity.y <= 0.0f &&
+            oldBottom >= blockTop - m_GroundSnapTolerance &&
+            newBottom <= blockTop + m_GroundSnapTolerance) {
             bestGroundY = std::max(bestGroundY, blockTop);
             foundGround = true;
         }
@@ -496,8 +530,10 @@ bool App::ResolveSlopeGrounding(
     const float leftFootX = newBodyCenter.x - newBodySize.x * 0.5f + footInset;
     const float rightFootX = newBodyCenter.x + newBodySize.x * 0.5f - footInset;
 
-    bool foundSlope = false;
-    float bestGroundY = -std::numeric_limits<float>::infinity();
+    bool foundExactSlope = false;
+    float bestExactGroundY = -std::numeric_limits<float>::infinity();
+    bool foundTransitionSlope = false;
+    float bestTransitionGroundY = -std::numeric_limits<float>::infinity();
 
     for (const auto& slope : m_Slopes) {
         const glm::vec2 delta = slope.end - slope.start;
@@ -506,9 +542,11 @@ bool App::ResolveSlopeGrounding(
         }
 
         for (const float footX : {leftFootX, newBodyCenter.x, rightFootX}) {
-            const float minX = std::min(slope.start.x, slope.end.x) - m_SlopeSnapTolerance;
-            const float maxX = std::max(slope.start.x, slope.end.x) + m_SlopeSnapTolerance;
-            if (footX < minX || footX > maxX) {
+            const float actualMinX = std::min(slope.start.x, slope.end.x);
+            const float actualMaxX = std::max(slope.start.x, slope.end.x);
+            const float transitionMinX = actualMinX - m_SlopeSnapTolerance;
+            const float transitionMaxX = actualMaxX + m_SlopeSnapTolerance;
+            if (footX < transitionMinX || footX > transitionMaxX) {
                 continue;
             }
 
@@ -517,23 +555,44 @@ bool App::ResolveSlopeGrounding(
                 continue;
             }
 
-            const float slopeY = slope.start.y + delta.y * t;
+            const bool withinActualSpan =
+                footX >= actualMinX && footX <= actualMaxX && t >= 0.0f && t <= 1.0f;
+            const float sampledT = withinActualSpan ? t : std::clamp(t, 0.0f, 1.0f);
+            const float slopeY = slope.start.y + delta.y * sampledT;
             const bool crossesSlope =
                 oldBottom >= slopeY - m_SlopeSnapTolerance &&
                 newBottom <= slopeY + m_SlopeSnapTolerance;
-            if (crossesSlope && (!foundSlope || slopeY > bestGroundY)) {
-                bestGroundY = slopeY;
-                foundSlope = true;
+            if (!crossesSlope) {
+                continue;
+            }
+
+            if (withinActualSpan) {
+                if (!foundExactSlope || slopeY > bestExactGroundY) {
+                    bestExactGroundY = slopeY;
+                    foundExactSlope = true;
+                }
+            }
+            else if (!foundTransitionSlope || slopeY > bestTransitionGroundY) {
+                bestTransitionGroundY = slopeY;
+                foundTransitionSlope = true;
             }
         }
     }
 
-    if (!foundSlope) {
+    if (foundExactSlope) {
+        const float bottomOffset = newPos.y - newBottom;
+        newPos.y = bestExactGroundY + bottomOffset;
+        velocity.y = 0.0f;
+        onGround = true;
+        return true;
+    }
+
+    if (!foundTransitionSlope) {
         return false;
     }
 
     const float bottomOffset = newPos.y - newBottom;
-    newPos.y = bestGroundY + bottomOffset;
+    newPos.y = bestTransitionGroundY + bottomOffset;
     velocity.y = 0.0f;
     onGround = true;
     return true;
@@ -545,35 +604,84 @@ bool App::ResolveCeilingSlopeCollision(
     const CharacterCollisionProfile& profile,
     glm::vec2& velocity
 ) {
-    (void)oldPos;
-
     if (velocity.y <= 0.0f) {
         return false;
     }
 
+    glm::vec2 oldHeadCenter;
+    glm::vec2 oldHeadSize;
     glm::vec2 headCenter;
     glm::vec2 headSize;
+    GetCharacterHeadBox(oldPos, profile, oldHeadCenter, oldHeadSize);
     GetCharacterHeadBox(newPos, profile, headCenter, headSize);
+    const float oldHeadTop = oldHeadCenter.y + oldHeadSize.y * 0.5f;
     const float headTop = headCenter.y + headSize.y * 0.5f;
     const float headOffset = headTop - newPos.y;
+    const float undersideTolerance = std::min(m_SlopeSnapTolerance, m_GroundSnapTolerance + 1.0f);
 
-    for (const auto& slope : m_CeilingSlopes) {
-        const glm::vec2 delta = slope.end - slope.start;
-        if (std::abs(delta.x) < 0.001f) {
-            continue;
-        }
+    auto crossesIndexedSlopesFromBelow = [&](const auto& slopes, float tolerance, auto&& shouldSkip) {
+        for (std::size_t i = 0; i < slopes.size(); ++i) {
+            if (shouldSkip(i)) {
+                continue;
+            }
 
-        const float t = (headCenter.x - slope.start.x) / delta.x;
-        if (t < -0.10f || t > 1.10f) {
-            continue;
-        }
+            const auto& slope = slopes[i];
+            const glm::vec2 delta = slope.end - slope.start;
+            if (std::abs(delta.x) < 0.001f) {
+                continue;
+            }
 
-        const float ceilingY = slope.start.y + delta.y * t;
-        if (headTop >= ceilingY - m_SlopeSnapTolerance) {
-            newPos.y = ceilingY - headOffset;
+            const float t = (headCenter.x - slope.start.x) / delta.x;
+            if (t < -0.10f || t > 1.10f) {
+                continue;
+            }
+
+            const float surfaceY = slope.start.y + delta.y * t;
+            const bool crossesFromBelow =
+                oldHeadTop <= surfaceY + tolerance &&
+                headTop >= surfaceY - tolerance;
+            if (!crossesFromBelow) {
+                continue;
+            }
+
+            newPos.y = surfaceY - headOffset;
             velocity.y = 0.0f;
             return true;
         }
+
+        return false;
+    };
+
+    auto crossesFloorSlopeFromBelowNearHighEnd = [&](std::size_t i) {
+        if (m_HasLevel2HangingPlatformSlope &&
+            (i == m_Level2HangingPlatformSlopeIndex ||
+             i == m_Level2HangingPlatformSlopeIndex2)) {
+            return false;
+        }
+
+        const auto& slope = m_Slopes[i];
+        const glm::vec2 highPoint = (slope.start.y >= slope.end.y) ? slope.start : slope.end;
+        return std::abs(headCenter.x - highPoint.x) <= m_SlopeTopTransitionWidth;
+    };
+
+    if (crossesIndexedSlopesFromBelow(
+            m_CeilingSlopes,
+            m_SlopeSnapTolerance,
+            [](std::size_t) { return false; }
+        )) {
+        return true;
+    }
+
+    // Floor slopes also need an underside barrier so characters cannot jump
+    // up through the ramp shell into the higher block behind it.
+    if (crossesIndexedSlopesFromBelow(
+            m_Slopes,
+            undersideTolerance,
+            [&](std::size_t i) {
+                return !crossesFloorSlopeFromBelowNearHighEnd(i);
+            }
+        )) {
+        return true;
     }
 
     return false;
@@ -619,8 +727,10 @@ bool App::FindBestSlopeYAtX(
     const float leftFootX = desiredX + profile.bodyHitboxOffset.x - bodySize.x * 0.5f + footInset;
     const float rightFootX = desiredX + profile.bodyHitboxOffset.x + bodySize.x * 0.5f - footInset;
 
-    bool foundSlope = false;
-    float bestSlopeY = -std::numeric_limits<float>::infinity();
+    bool foundExactSlope = false;
+    float bestExactSlopeY = -std::numeric_limits<float>::infinity();
+    bool foundTransitionSlope = false;
+    float bestTransitionSlopeY = -std::numeric_limits<float>::infinity();
 
     for (const auto& slope : m_Slopes) {
         const glm::vec2 delta = slope.end - slope.start;
@@ -629,9 +739,11 @@ bool App::FindBestSlopeYAtX(
         }
 
         for (const float footX : {leftFootX, desiredX, rightFootX}) {
-            const float minX = std::min(slope.start.x, slope.end.x) - m_SlopeTopTransitionWidth;
-            const float maxX = std::max(slope.start.x, slope.end.x) + m_SlopeTopTransitionWidth;
-            if (footX < minX || footX > maxX) {
+            const float actualMinX = std::min(slope.start.x, slope.end.x);
+            const float actualMaxX = std::max(slope.start.x, slope.end.x);
+            const float transitionMinX = actualMinX - m_SlopeTopTransitionWidth;
+            const float transitionMaxX = actualMaxX + m_SlopeTopTransitionWidth;
+            if (footX < transitionMinX || footX > transitionMaxX) {
                 continue;
             }
 
@@ -640,25 +752,39 @@ bool App::FindBestSlopeYAtX(
                 continue;
             }
 
-            const float slopeY = slope.start.y + delta.y * t;
+            const bool withinActualSpan =
+                footX >= actualMinX && footX <= actualMaxX && t >= 0.0f && t <= 1.0f;
+            const float sampledT = withinActualSpan ? t : std::clamp(t, 0.0f, 1.0f);
+            const float slopeY = slope.start.y + delta.y * sampledT;
             const float deltaFromFeet = slopeY - oldBottom;
             if (deltaFromFeet < -m_SlopeFollowTolerance ||
                 deltaFromFeet > m_SlopeTopTransitionHeight) {
                 continue;
             }
 
-            if (!foundSlope || slopeY > bestSlopeY) {
-                bestSlopeY = slopeY;
-                foundSlope = true;
+            if (withinActualSpan) {
+                if (!foundExactSlope || slopeY > bestExactSlopeY) {
+                    bestExactSlopeY = slopeY;
+                    foundExactSlope = true;
+                }
+            }
+            else if (!foundTransitionSlope || slopeY > bestTransitionSlopeY) {
+                bestTransitionSlopeY = slopeY;
+                foundTransitionSlope = true;
             }
         }
     }
 
-    if (!foundSlope) {
+    if (foundExactSlope) {
+        outSlopeY = bestExactSlopeY;
+        return true;
+    }
+
+    if (!foundTransitionSlope) {
         return false;
     }
 
-    outSlopeY = bestSlopeY;
+    outSlopeY = bestTransitionSlopeY;
     return true;
 }
 
@@ -672,9 +798,17 @@ void App::ApplySlopeFollow(
         return;
     }
 
+    glm::vec2 oldBodyCenter;
+    glm::vec2 oldBodySize;
     glm::vec2 bodyCenter;
     glm::vec2 bodySize;
+    GetCharacterBodyBox(oldPos, profile, oldBodyCenter, oldBodySize);
     GetCharacterBodyBox(newPos, profile, bodyCenter, bodySize);
+    const float oldBottom = oldBodyCenter.y - oldBodySize.y * 0.5f;
+    const float upwardLift = slopeY - oldBottom;
+    if (upwardLift > m_StepUpHeight + m_GroundSnapTolerance) {
+        return;
+    }
     const float bottomOffset = newPos.y - (bodyCenter.y - bodySize.y * 0.5f);
     newPos.y = slopeY + bottomOffset;
 }
@@ -696,6 +830,9 @@ bool App::FindNearbyGroundY(
     float bestGroundY = -std::numeric_limits<float>::infinity();
 
     for (const auto& block : m_SolidBlocks) {
+        if (block.isSlopeGuard) {
+            continue;
+        }
         const float blockLeft = block.center.x - block.size.x * 0.5f;
         const float blockRight = block.center.x + block.size.x * 0.5f;
         if (right <= blockLeft - m_FootProbeInset || left >= blockRight + m_FootProbeInset) {
@@ -786,10 +923,19 @@ bool App::CharacterTouchesHazard(
         return false;
     }
 
-    SolidRect hazardRect;
-    hazardRect.center = hazard.center;
-    hazardRect.size = hazard.size;
-    return CharacterTouchesRect(character, profile, hazardRect);
+    glm::vec2 bodyCenter;
+    glm::vec2 bodySize;
+    GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
+    const glm::vec2 hazardProbeCenter = {
+        bodyCenter.x,
+        bodyCenter.y - bodySize.y * 0.22f,
+    };
+    const glm::vec2 hazardProbeSize = {
+        std::max(2.0f, bodySize.x * 0.72f),
+        std::max(2.0f, bodySize.y * 0.48f),
+    };
+
+    return CheckAABB(hazardProbeCenter, hazardProbeSize, hazard.center, hazard.size);
 }
 
 bool App::IsCharacterInLiquid(
@@ -800,20 +946,8 @@ bool App::IsCharacterInLiquid(
         return false;
     }
 
-    glm::vec2 bodyCenter;
-    glm::vec2 bodySize;
-    GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
-    const glm::vec2 footCenter = {
-        bodyCenter.x,
-        bodyCenter.y - bodySize.y * 0.40f,
-    };
-    const glm::vec2 footSize = {
-        std::max(2.0f, bodySize.x * 0.70f),
-        std::max(2.0f, bodySize.y * 0.20f),
-    };
-
     for (const auto& hazard : m_Hazards) {
-        if (CheckAABB(footCenter, footSize, hazard.center, hazard.size)) {
+        if (CharacterTouchesHazard(character, profile, hazard)) {
             return true;
         }
     }

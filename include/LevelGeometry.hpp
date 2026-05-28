@@ -7,6 +7,7 @@ struct SolidRect {
     glm::vec2 center = {0.0f, 0.0f};
     glm::vec2 size = {0.0f, 0.0f};
     bool blockBottom = true;
+    bool isSlopeGuard = false;
 };
 
 struct SlopeSurface {

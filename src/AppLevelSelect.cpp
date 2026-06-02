@@ -32,7 +32,7 @@ void App::UpdateLevelSelect() {
             glm::vec2 hoverSize;
         };
 
-        const std::array<ButtonLayout, 3> layouts = {{
+        const std::array<ButtonLayout, 4> layouts = {{
             {
                 1,
                 {-14.0f, -311.0f},
@@ -53,6 +53,13 @@ void App::UpdateLevelSelect() {
                 LEVEL_SELECT_TRIANGLE_HOTSPOT_SIZE,
                 GA_RESOURCE_DIR "/Image/Assets/level_triangle.png",
                 LEVEL_SELECT_TRIANGLE_MARKER_SIZE,
+            },
+            {
+                4,
+                {3.0f, -48.0f},
+                LEVEL_SELECT_HEXAGON_HOTSPOT_SIZE,
+                GA_RESOURCE_DIR "/Image/Assets/level_hexagon.png",
+                LEVEL_SELECT_HEXAGON_MARKER_SIZE,
             },
         }};
 

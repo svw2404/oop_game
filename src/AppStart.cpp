@@ -60,6 +60,9 @@ void App::Start() {
     // -------------------------------------------------------------------------
     m_BackgroundOriginalSize = {2380.0f, 1760.0f};
     m_BackgroundDisplayedSize = {1244.16f, 699.84f};
+    if (m_ActiveLevelIndex == 4) {
+        m_BackgroundOriginalSize = {1455.0f, 1081.0f};
+    }
 
     // -------------------------------------------------------------------------
     // 2) 背景
@@ -70,6 +73,9 @@ void App::Start() {
     }
     else if (m_ActiveLevelIndex == 3) {
         backgroundPath = std::string(GA_RESOURCE_DIR) + "/Image/Background/background2.png";
+    }
+    else if (m_ActiveLevelIndex == 4) {
+        backgroundPath = std::string(GA_RESOURCE_DIR) + "/Image/Background/background3.png";
     }
 
     m_Background = std::make_shared<BackgroundImage>(backgroundPath);
@@ -192,7 +198,9 @@ void App::Start() {
         );
     }
 
-    if (m_ActiveLevelIndex == 3) {
+    if (m_ActiveLevelIndex == 4) {
+        BuildLevel4();
+    } else if (m_ActiveLevelIndex == 3) {
         BuildLevel3();
     } else if (m_ActiveLevelIndex == 2) {
         BuildLevel2();
@@ -307,13 +315,18 @@ void App::Start() {
             moveBodyPaths.push_back(bodyPaths.front());
         }
 
+        const float levelVisualScale = (m_ActiveLevelIndex == 4) ? (2380.0f / 1455.0f) : 1.0f;
+
         m_Fireboy = std::make_shared<HeadBodyCharacter>(
             moveBodyPaths, runHeadPaths, 10.0f, 120, true, 120, true
         );
-        m_Fireboy->SetSize({36.0f, 40.0f});
+        m_Fireboy->SetSize({36.0f * levelVisualScale, 40.0f * levelVisualScale});
         m_Fireboy->SetHeadScale(1.25f / 1.4f);
-        m_Fireboy->SetBodySize({30.0f / 1.4f, 31.0f / 1.4f});
-        m_Fireboy->SetHeadOffset({0.0f, -4.0f});
+        m_Fireboy->SetBodySize({
+            (30.0f / 1.4f) * levelVisualScale,
+            (31.0f / 1.4f) * levelVisualScale
+        });
+        m_Fireboy->SetHeadOffset({0.0f, -4.0f * levelVisualScale});
         RecalculateFireboyCollisionBoxes();
 
         m_Fireboy->SetIdleBodyImage(bodyPaths.front());
@@ -328,14 +341,19 @@ void App::Start() {
         m_Fireboy->SetLifeState(HeadBodyCharacter::LifeState::Alive);
         m_Fireboy->SetMotionState(HeadBodyCharacter::MotionState::Idle);
 
-        const float floorTop = m_LeftFloorSpawnRect.center.y + (m_LeftFloorSpawnRect.size.y * 0.5f);
-        const float wallRight = m_LeftWallSpawnRect.center.x + (m_LeftWallSpawnRect.size.x * 0.5f);
-
         glm::vec2 spawnPos;
-        const float leftExtent = -GetFireboyLeftEdge({0.0f, 0.0f});
         const float bodyBottom = GetFireboyBodyBottom({0.0f, 0.0f});
-        spawnPos.x = wallRight + leftExtent + 5.0f;
-        spawnPos.y = floorTop - bodyBottom;
+        if (m_ActiveLevelIndex == 4) {
+            const glm::vec2 floorPoint = ImagePointToWorldPoint(210.0f, 1040.0f);
+            spawnPos.x = floorPoint.x;
+            spawnPos.y = floorPoint.y - bodyBottom;
+        } else {
+            const float floorTop = m_LeftFloorSpawnRect.center.y + (m_LeftFloorSpawnRect.size.y * 0.5f);
+            const float wallRight = m_LeftWallSpawnRect.center.x + (m_LeftWallSpawnRect.size.x * 0.5f);
+            const float leftExtent = -GetFireboyLeftEdge({0.0f, 0.0f});
+            spawnPos.x = wallRight + leftExtent + 5.0f;
+            spawnPos.y = floorTop - bodyBottom;
+        }
 
         m_Fireboy->SetPosition(spawnPos);
         m_FireboySpawnPosition = spawnPos;
@@ -449,14 +467,19 @@ void App::Start() {
             moveBodyPaths.push_back(bodyPaths.front());
         }
 
+        const float levelVisualScale = (m_ActiveLevelIndex == 4) ? (2380.0f / 1455.0f) : 1.0f;
+
         m_Watergirl = std::make_shared<HeadBodyCharacter>(
             moveBodyPaths, runHeadPaths, 10.0f, 120, true, 120, true
         );
-        m_Watergirl->SetSize({36.0f, 40.0f});
+        m_Watergirl->SetSize({36.0f * levelVisualScale, 40.0f * levelVisualScale});
         m_Watergirl->SetHeadScale(1.25f / 1.4f);
         m_Watergirl->SetMoveHeadWidthScale(1.18f);
-        m_Watergirl->SetBodySize({30.0f / 1.4f, 31.0f / 1.4f});
-        m_Watergirl->SetHeadOffset({0.0f, -4.0f});
+        m_Watergirl->SetBodySize({
+            (30.0f / 1.4f) * levelVisualScale,
+            (31.0f / 1.4f) * levelVisualScale
+        });
+        m_Watergirl->SetHeadOffset({0.0f, -4.0f * levelVisualScale});
         RecalculateWatergirlCollisionBoxes();
 
         m_Watergirl->SetIdleBodyImage(bodyPaths.front());
@@ -473,7 +496,11 @@ void App::Start() {
 
         glm::vec2 spawnPos;
         const float bodyBottom = GetWatergirlBodyBottom({0.0f, 0.0f});
-        if (m_ActiveLevelIndex == 3) {
+        if (m_ActiveLevelIndex == 4) {
+            const glm::vec2 floorPoint = ImagePointToWorldPoint(1360.0f, 170.0f);
+            spawnPos.x = floorPoint.x;
+            spawnPos.y = floorPoint.y - bodyBottom;
+        } else if (m_ActiveLevelIndex == 3) {
             const SolidRect rightFloorSpawnRect =
                 ImageRectToWorldRect(2014.0f, 1702.0f, 2340.0f, 1760.0f);
             const SolidRect rightWallSpawnRect =

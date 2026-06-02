@@ -272,6 +272,7 @@ private:
     void BuildLevel1();
     void BuildLevel2();
     void BuildLevel3();
+    void BuildLevel4();
     void AddCurrentSlopeGuardBands();
     glm::vec2 ImageSizeToWorldSize(float imageWidth, float imageHeight, float scale = 1.0f) const;
     std::shared_ptr<Character> AddPropAtBottom(

@@ -566,7 +566,7 @@ void App::BuildLevel2() {
         374.0f, 1709.0f,
         903.0f, 1711.0f,
         426.0f, 1743.0f,
-        851.0f, 1747.0f,0
+        851.0f, 1747.0f,
         10.2f
     );
     AddAnimatedHazardInImageTrap(

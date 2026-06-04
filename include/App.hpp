@@ -15,7 +15,6 @@
 #include "Util/Renderer.hpp"
 #include "Util/Text.hpp"
 #include "Util/BGM.hpp"
-#include "Util/SFX.hpp"
 
 class OverlayText : public Util::GameObject {
 public:
@@ -273,6 +272,7 @@ private:
     void BuildLevel2();
     void BuildLevel3();
     void BuildLevel4();
+    void BuildLevel5();
     void AddCurrentSlopeGuardBands();
     glm::vec2 ImageSizeToWorldSize(float imageWidth, float imageHeight, float scale = 1.0f) const;
     std::shared_ptr<Character> AddPropAtBottom(
@@ -436,9 +436,6 @@ private:
     // Scene objects
     // ------------------------------------------------------------------------
     std::shared_ptr<BackgroundImage> m_Background;
-    std::shared_ptr<Util::BGM> m_BackgroundMusic;
-    std::shared_ptr<Util::SFX> m_DeathSound;
-    std::shared_ptr<Util::SFX> m_FinishSound;
     std::shared_ptr<HeadBodyCharacter> m_Fireboy;
     std::shared_ptr<HeadBodyCharacter> m_Watergirl;
     std::shared_ptr<Character> m_GreenPlatform;

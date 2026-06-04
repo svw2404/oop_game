@@ -839,8 +839,6 @@ void App::UpdateVictoryOverlayVisuals() {
         m_VictoryRankText->SetColor(Util::Color(255, 230, 170, 255));
     }
 
-    // Continue is intentionally hover-ready but not routed yet because the
-    // game still has no next-level/home flow to transition into.
     if (m_VictoryContinueButton.labelObject) {
         const glm::vec2 cursor = Util::Input::GetCursorPosition();
         const bool hovered = CheckAABB(
@@ -854,6 +852,17 @@ void App::UpdateVictoryOverlayVisuals() {
             ? Util::Color(255, 220, 140, 255)
             : Util::Color(255, 255, 255, 255)
         );
+
+        if (hovered && Util::Input::IsKeyDown(Util::Keycode::MOUSE_LB)) {
+            m_CurrentState = State::LEVEL_SELECT;
+            return;
+        }
+    }
+
+    if (Util::Input::IsKeyDown(Util::Keycode::H)) {
+        m_CurrentState = State::LEVEL_SELECT;
+    } else if (Util::Input::IsKeyDown(Util::Keycode::R)) {
+        m_CurrentState = State::START;
     }
 }
 
@@ -874,10 +883,7 @@ void App::CheckHazards() {
         };
 
     auto playDeathSfx = [&]() {
-        if (m_DeathSound) {
-            m_DeathSound->Play(0);
-        }
-        else if (m_DeathMusic) {
+        if (m_DeathMusic) {
             m_DeathMusic->Play(0);
         }
         };

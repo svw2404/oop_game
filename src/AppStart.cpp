@@ -36,25 +36,6 @@ void App::Start() {
     // creates a fresh world instead of stacking duplicate drawables.
     m_Root = Util::Renderer();
 
-    // 載入並播放背景音樂
-    if (!m_BackgroundMusic) {
-        m_BackgroundMusic = std::make_shared<Util::BGM>(GA_RESOURCE_DIR "/Music/Adventure.mp3");
-        m_BackgroundMusic->SetVolume(64); // 設定音量 (範圍 0~128)
-        m_BackgroundMusic->Play();        // 預設 -1 表示無限循環播放
-    }
-
-    // 載入死亡音效
-    if (!m_DeathSound) {
-        m_DeathSound = std::make_shared<Util::SFX>(GA_RESOURCE_DIR "/Music/Death.mp3");
-        m_DeathSound->SetVolume(64); // 設定音量
-    }
-
-    // 載入過關音效
-    if (!m_FinishSound) {
-        m_FinishSound = std::make_shared<Util::SFX>(GA_RESOURCE_DIR "/Music/Finish.mp3");
-        m_FinishSound->SetVolume(64); // 設定音量
-    }
-
     // -------------------------------------------------------------------------
     // 1) 基本場景參數
     // -------------------------------------------------------------------------
@@ -62,6 +43,8 @@ void App::Start() {
     m_BackgroundDisplayedSize = {1244.16f, 699.84f};
     if (m_ActiveLevelIndex == 4) {
         m_BackgroundOriginalSize = {1455.0f, 1081.0f};
+    } else if (m_ActiveLevelIndex == 5) {
+        m_BackgroundOriginalSize = {1453.0f, 1082.0f};
     }
 
     // -------------------------------------------------------------------------
@@ -77,8 +60,12 @@ void App::Start() {
     else if (m_ActiveLevelIndex == 4) {
         backgroundPath = std::string(GA_RESOURCE_DIR) + "/Image/Background/background3.png";
     }
+    else if (m_ActiveLevelIndex == 5) {
+        backgroundPath = std::string(GA_RESOURCE_DIR) + "/Image/Background/background4.png";
+    }
 
     m_Background = std::make_shared<BackgroundImage>(backgroundPath);
+    m_Background->SetImageSize(m_BackgroundDisplayedSize);
     m_Background->SetPosition({0.0f, 0.0f});
     m_Root.AddChild(m_Background);
 
@@ -198,7 +185,9 @@ void App::Start() {
         );
     }
 
-    if (m_ActiveLevelIndex == 4) {
+    if (m_ActiveLevelIndex == 5) {
+        BuildLevel5();
+    } else if (m_ActiveLevelIndex == 4) {
         BuildLevel4();
     } else if (m_ActiveLevelIndex == 3) {
         BuildLevel3();
@@ -315,18 +304,18 @@ void App::Start() {
             moveBodyPaths.push_back(bodyPaths.front());
         }
 
-        const float levelVisualScale = (m_ActiveLevelIndex == 4) ? (2380.0f / 1455.0f) : 1.0f;
-
         m_Fireboy = std::make_shared<HeadBodyCharacter>(
             moveBodyPaths, runHeadPaths, 10.0f, 120, true, 120, true
         );
-        m_Fireboy->SetSize({36.0f * levelVisualScale, 40.0f * levelVisualScale});
+        // Character size should stay consistent across levels; the background
+        // image resolution already changes the terrain scale via image->world mapping.
+        m_Fireboy->SetSize({36.0f, 40.0f});
         m_Fireboy->SetHeadScale(1.25f / 1.4f);
         m_Fireboy->SetBodySize({
-            (30.0f / 1.4f) * levelVisualScale,
-            (31.0f / 1.4f) * levelVisualScale
+            (30.0f / 1.4f),
+            (31.0f / 1.4f)
         });
-        m_Fireboy->SetHeadOffset({0.0f, -4.0f * levelVisualScale});
+        m_Fireboy->SetHeadOffset({0.0f, -4.0f});
         RecalculateFireboyCollisionBoxes();
 
         m_Fireboy->SetIdleBodyImage(bodyPaths.front());
@@ -343,7 +332,11 @@ void App::Start() {
 
         glm::vec2 spawnPos;
         const float bodyBottom = GetFireboyBodyBottom({0.0f, 0.0f});
-        if (m_ActiveLevelIndex == 4) {
+        if (m_ActiveLevelIndex == 5) {
+            const glm::vec2 floorPoint = ImagePointToWorldPoint(1185.0f, 147.0f);
+            spawnPos.x = floorPoint.x;
+            spawnPos.y = floorPoint.y - bodyBottom;
+        } else if (m_ActiveLevelIndex == 4) {
             const glm::vec2 floorPoint = ImagePointToWorldPoint(210.0f, 1040.0f);
             spawnPos.x = floorPoint.x;
             spawnPos.y = floorPoint.y - bodyBottom;
@@ -467,19 +460,17 @@ void App::Start() {
             moveBodyPaths.push_back(bodyPaths.front());
         }
 
-        const float levelVisualScale = (m_ActiveLevelIndex == 4) ? (2380.0f / 1455.0f) : 1.0f;
-
         m_Watergirl = std::make_shared<HeadBodyCharacter>(
             moveBodyPaths, runHeadPaths, 10.0f, 120, true, 120, true
         );
-        m_Watergirl->SetSize({36.0f * levelVisualScale, 40.0f * levelVisualScale});
+        m_Watergirl->SetSize({36.0f, 40.0f});
         m_Watergirl->SetHeadScale(1.25f / 1.4f);
         m_Watergirl->SetMoveHeadWidthScale(1.18f);
         m_Watergirl->SetBodySize({
-            (30.0f / 1.4f) * levelVisualScale,
-            (31.0f / 1.4f) * levelVisualScale
+            (30.0f / 1.4f),
+            (31.0f / 1.4f)
         });
-        m_Watergirl->SetHeadOffset({0.0f, -4.0f * levelVisualScale});
+        m_Watergirl->SetHeadOffset({0.0f, -4.0f});
         RecalculateWatergirlCollisionBoxes();
 
         m_Watergirl->SetIdleBodyImage(bodyPaths.front());
@@ -496,7 +487,11 @@ void App::Start() {
 
         glm::vec2 spawnPos;
         const float bodyBottom = GetWatergirlBodyBottom({0.0f, 0.0f});
-        if (m_ActiveLevelIndex == 4) {
+        if (m_ActiveLevelIndex == 5) {
+            const glm::vec2 floorPoint = ImagePointToWorldPoint(260.0f, 147.0f);
+            spawnPos.x = floorPoint.x;
+            spawnPos.y = floorPoint.y - bodyBottom;
+        } else if (m_ActiveLevelIndex == 4) {
             const glm::vec2 floorPoint = ImagePointToWorldPoint(1360.0f, 170.0f);
             spawnPos.x = floorPoint.x;
             spawnPos.y = floorPoint.y - bodyBottom;

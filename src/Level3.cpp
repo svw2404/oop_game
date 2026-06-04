@@ -42,56 +42,51 @@ void App::BuildLevel3() {
     // but still decompose it into stable solids + explicit slopes for this
     // engine rather than trying to do literal polygon collision.
     constexpr float topLeftPlatformLeft = 245.0f;
-    constexpr float topLeftPlatformRight = 1100.0f;
-    constexpr float topLeftPlatformTop = 220.0f;
+    constexpr float topLeftPlatformRight = 1104.0f;
+    constexpr float topLeftPlatformTop = 218.0f;
     constexpr float topLeftPlatformBottom = 280.0f;
 
     constexpr float topRightPlatformLeft = 1296.0f;
     constexpr float topRightPlatformRight = 2088.0f;
-    constexpr float topRightPlatformTop = 220.0f;
-    constexpr float topRightPlatformBottom = 276.0f;
+    constexpr float topRightPlatformTop = 218.0f;
+    constexpr float topRightPlatformBottom = 278.0f;
 
-    constexpr float leftPillarLeft = 553.0f;
-    constexpr float leftPillarRight = 611.0f;
-    constexpr float leftPillarTop = 278.0f;
-    constexpr float leftPillarBottom = 1084.0f;
+    constexpr float leftPillarLeft = 549.0f;
+    constexpr float leftPillarRight = 609.0f;
+    constexpr float leftPillarTop = 276.0f;
+    constexpr float leftPillarBottom = 1086.0f;
 
-    constexpr float rightPillarLeft = 1785.0f;
+    constexpr float rightPillarLeft = 1790.0f;
     constexpr float rightPillarRight = 1848.0f;
-    constexpr float rightPillarTop = 276.0f;
-    constexpr float rightPillarBottom = 1084.0f;
+    constexpr float rightPillarTop = 273.0f;
+    constexpr float rightPillarBottom = 1086.0f;
 
     constexpr float leftLedgeOuterLeft = 607.0f;
-    constexpr float leftLedgeLiquidLeft = 669.0f;
-    constexpr float leftLedgeLiquidRight = 789.0f;
+    constexpr float leftLedgeLiquidLeft = 664.0f;
+    constexpr float leftLedgeLiquidRight = 792.0f;
     constexpr float leftLedgeOuterRight = 857.0f;
-    constexpr float leftLedgeTopLeftY = 778.0f;
+    constexpr float leftLedgeTopLeftY = 780.0f;
     constexpr float leftLedgeTopRightY = 776.0f;
-    constexpr float leftLedgeLiquidBottomLeftY = 808.0f;
+    constexpr float leftLedgeLiquidBottomLeftY = 813.0f;
     constexpr float leftLedgeLiquidBottomRightY = 810.0f;
-    constexpr float leftLedgeBottomY = 836.0f;
+    constexpr float leftLedgeBottomY = 831.0f;
 
     constexpr float rightLedgeOuterLeft = 1542.0f;
-    constexpr float rightLedgeLiquidLeft = 1597.0f;
-    constexpr float rightLedgeLiquidRight = 1725.0f;
-    constexpr float rightLedgeOuterRight = 1790.0f;
-    constexpr float rightLedgeTopLeftY = 776.0f;
-    constexpr float rightLedgeTopRightY = 778.0f;
-    constexpr float rightLedgeLiquidBottomLeftY = 810.0f;
-    constexpr float rightLedgeLiquidBottomRightY = 810.0f;
-    constexpr float rightLedgeBottomY = 836.0f;
+    constexpr float rightLedgeLiquidLeft = 1604.0f;
+    constexpr float rightLedgeLiquidRight = 1729.0f;
+    constexpr float rightLedgeOuterRight = 1787.0f;
+    constexpr float rightLedgeTopLeftY = 778.0f;
+    constexpr float rightLedgeTopRightY = 776.0f;
+    constexpr float rightLedgeLiquidBottomLeftY = 808.0f;
+    constexpr float rightLedgeLiquidBottomRightY = 808.0f;
+    constexpr float rightLedgeBottomY = 831.0f;
 
     // Fill the shoulder mass under the peak, but keep that fill lower than the
     // visible ramp shell so it seals the object without flattening the slope.
-    constexpr float centerLeftShoulderFillLeft = 982.0f;
-    constexpr float centerLeftShoulderFillRight = 1109.0f;
-    constexpr float centerLeftShoulderFillTop = 690.0f;
-    constexpr float centerLeftShoulderFillBottom = 769.0f;
-
-    constexpr float centerRightShoulderFillLeft = 1227.0f;
-    constexpr float centerRightShoulderFillRight = 1412.0f;
-    constexpr float centerRightShoulderFillTop = 684.0f;
-    constexpr float centerRightShoulderFillBottom = 771.0f;
+    constexpr float centerLeftCavitySealX = 1103.0f;
+    constexpr float centerLeftCavitySealY = 769.0f;
+    constexpr float centerRightShoulderOuterX = 1288.0f;
+    constexpr float centerRightShoulderOuterY = 773.0f;
 
     // Left shoulder geometry (imgX=982–1109, imgY=653–769) and right shoulder
     // (imgX=1227–1412, imgY=644–771) are intentionally NOT added as solid blocks.
@@ -100,32 +95,60 @@ void App::BuildLevel3() {
     // ~24 wu Y-pop whenever a character walked from the flat block onto the rising
     // peak slope — the same X range, but two different Y values in the same frame.
 
-    constexpr float centerTopCapLeft = 1165.0f;
-    constexpr float centerTopCapRight = 1227.0f;
-    constexpr float centerTopCapTop = 470.0f;
-    constexpr float centerTopCapBottom = 653.0f;
+    constexpr float centerPeakLeftX = 1162.0f;
+    constexpr float centerPeakRightX = 1236.0f;
+    constexpr float centerPeakY = 471.0f;
+    constexpr float centerPeakBottomY = 690.0f;
 
-    constexpr float centerStemLeft = 1109.0f;
-    constexpr float centerStemRight = 1227.0f;
-    constexpr float centerStemTop = 769.0f;
-    constexpr float centerStemBottom = 958.0f;
+    constexpr float centerOuterLeftX = 985.0f;
+    constexpr float centerOuterLeftY = 656.0f;
+    constexpr float centerOuterRightX = 1403.0f;
+    constexpr float centerOuterRightY = 649.0f;
 
-    constexpr float centerLowerLeftSupportLeft = 1037.0f;
-    constexpr float centerLowerLeftSupportRight = 1171.0f;
-    constexpr float centerLowerLeftSupportTop = 961.0f;
-    constexpr float centerLowerLeftSupportBottom = 1086.0f;
+    constexpr float centerStemLeft = 1170.0f;
+    constexpr float centerStemRight = 1229.0f;
+    constexpr float centerStemBottom = 952.0f;
+    constexpr float centerStemNeckTop = 690.0f;
 
-    constexpr float centerLowerRightSupportLeft = 1227.0f;
-    constexpr float centerLowerRightSupportRight = 1352.0f;
-    constexpr float centerLowerRightSupportTop = 958.0f;
-    constexpr float centerLowerRightSupportBottom = 1081.0f;
+    constexpr float centerLeftUpperWingLeft = 1103.0f;
+    constexpr float centerLeftUpperWingRight = 1172.0f;
+    constexpr float centerLeftUpperWingTop = 769.0f;
+    constexpr float centerLeftUpperWingBottom = 952.0f;
 
-    constexpr float baseBridgeTopLeftX = 366.0f;
-    constexpr float baseBridgeTopRightX = 2037.0f;
-    constexpr float baseBridgeTopY = 1084.0f;
-    constexpr float baseBridgeBottomLeftX = 301.0f;
-    constexpr float baseBridgeBottomRightX = 2086.0f;
-    constexpr float baseBridgeBottomY = 1137.0f;
+    constexpr float centerRightUpperWingLeft = 1233.0f;
+    constexpr float centerRightUpperWingRight = 1288.0f;
+    constexpr float centerRightUpperWingTop = 767.0f;
+    constexpr float centerRightUpperWingBottom = 952.0f;
+
+    constexpr float centerLowerLeftSupportLeft = 1040.0f;
+    constexpr float centerLowerLeftSupportTop = 1084.0f;
+    constexpr float centerLowerLeftFillRight = 1172.0f;
+    constexpr float centerLowerLeftFillTop = 952.0f;
+
+    constexpr float centerLowerRightSupportRight = 1349.0f;
+    constexpr float centerLowerRightSupportTop = 1086.0f;
+    constexpr float centerLowerRightFillLeft = 1229.0f;
+    constexpr float centerLowerRightFillTop = 952.0f;
+
+    constexpr float baseBottomStripLeft = 366.0f;
+    constexpr float baseBottomStripRight = 2040.0f;
+    constexpr float baseBottomStripTop = 1086.0f;
+    constexpr float baseBottomStripBottom = 1139.0f;
+    constexpr float leftBaseRaisedLeft = 366.0f;
+    constexpr float leftBaseRaisedRight = 551.0f;
+    constexpr float leftBaseRaisedTop = 1079.0f;
+    constexpr float rightBaseRaisedLeft = 1357.0f;
+    constexpr float rightBaseRaisedRight = 1792.0f;
+    constexpr float rightBaseRaisedTop = 1081.0f;
+    constexpr float rightOuterBaseRaisedLeft = 1848.0f;
+    constexpr float rightOuterBaseRaisedRight = 2040.0f;
+    constexpr float rightOuterBaseRaisedTop = 1084.0f;
+    constexpr float baseBottomLeftX = 308.0f;
+    constexpr float baseBottomRightX = 2091.0f;
+    constexpr float baseBottomY = 1139.0f;
+
+    // Keep one named floor Y for the center doors below.
+    constexpr float baseBridgeTopY = baseBottomStripTop;
 
     // Level 3 uses the same collision model as the other levels:
     // - SolidRect for the stable terrain mass
@@ -220,36 +243,59 @@ void App::BuildLevel3() {
         rightLedgeLiquidRight, rightLedgeTopRightY, rightLedgeOuterRight, rightLedgeBottomY
     ));
 
-    // Center peak solid: top cap + stem + low underfills inside the shoulders.
+    // Center peak solid rebuilt from the full image-map contour.
+    //
+    // Shoulder fills are placed with their TOP at the walkable shoulder Y so
+    // that a character descending slope S7 (which ends at y=773) or walking
+    // the left shoulder (y≈776) lands directly on the fill surface.
+    // Previously the fills had tops at y=690 — 33 world-units above the slope
+    // endpoints — meaning characters couldn't step up onto them (StepUpHeight=14).
+    //
+    // Gap fills bridge from each slope's low endpoint down to the shoulder fill
+    // top, sealing the interior seam without competing with the walkable shell.
+    // Ceiling slopes in m_CeilingSlopes (added below) cover the outer ascending
+    // surface and make the entire underside impenetrable from below.
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        centerTopCapLeft, centerTopCapTop, centerTopCapRight, centerTopCapBottom
+        centerPeakLeftX, centerPeakY, centerPeakRightX, centerPeakBottomY
+    ));
+    // Narrow center neck plus inner wings only; no broad hidden shoulder fill.
+    m_SolidBlocks.push_back(ImageRectToWorldRect(
+        centerStemLeft, centerStemNeckTop, centerStemRight, centerStemBottom, true
     ));
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        centerLeftShoulderFillLeft,
-        centerLeftShoulderFillTop,
-        centerLeftShoulderFillRight,
-        centerLeftShoulderFillBottom,
-        false
+        centerLeftUpperWingLeft, centerLeftUpperWingTop,
+        centerLeftUpperWingRight, centerLeftUpperWingBottom,
+        true
     ));
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        centerRightShoulderFillLeft,
-        centerRightShoulderFillTop,
-        centerRightShoulderFillRight,
-        centerRightShoulderFillBottom,
-        false
+        centerRightUpperWingLeft, centerRightUpperWingTop,
+        centerRightUpperWingRight, centerRightUpperWingBottom,
+        true
     ));
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        centerStemLeft, centerStemTop, centerStemRight, centerStemBottom
+        centerLowerLeftSupportLeft, centerLowerLeftFillTop,
+        centerLowerLeftFillRight, centerLowerLeftSupportTop,
+        true
     ));
-    // Do not fill the lower support ramps with flat-topped rectangles.
-    // Those tops sit above the visible diagonal shell across most of their width
-    // and create uphill-only snags / pops when characters try to climb Level 3.
-    // The bridge, stem, ramp slopes, guard bands, and underside blocking are
-    // enough to keep this mass sealed without flattening the ramps.
-
-    // Long connected base below the floating center.
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        baseBridgeTopLeftX, baseBridgeTopY, baseBridgeTopRightX, baseBridgeBottomY
+        centerLowerRightFillLeft, centerLowerRightFillTop,
+        centerLowerRightSupportRight, centerLowerRightSupportTop,
+        true
+    ));
+    // Keep the bottom strip continuous underneath the connected shape, but only
+    // raise the top where the VIA actually shows a ledge. That preserves the
+    // open pillar gaps without inventing a giant flat bridge at y=1084.
+    m_SolidBlocks.push_back(ImageRectToWorldRect(
+        baseBottomStripLeft, baseBottomStripTop, baseBottomStripRight, baseBottomStripBottom
+    ));
+    m_SolidBlocks.push_back(ImageRectToWorldRect(
+        leftBaseRaisedLeft, leftBaseRaisedTop, leftBaseRaisedRight, baseBottomStripTop
+    ));
+    m_SolidBlocks.push_back(ImageRectToWorldRect(
+        rightBaseRaisedLeft, rightBaseRaisedTop, rightBaseRaisedRight, baseBottomStripTop
+    ));
+    m_SolidBlocks.push_back(ImageRectToWorldRect(
+        rightOuterBaseRaisedLeft, rightOuterBaseRaisedTop, rightOuterBaseRaisedRight, baseBottomStripTop
     ));
 
     m_Slopes = {
@@ -270,32 +316,51 @@ void App::BuildLevel3() {
         {ImagePointToWorldPoint(796.0f, 1366.0f), ImagePointToWorldPoint(855.0f, 1334.0f)},
 
         // Block 6 upper ledges and peak
-        {ImagePointToWorldPoint(609.0f, 778.0f), ImagePointToWorldPoint(669.0f, 808.0f)},
-        {ImagePointToWorldPoint(789.0f, 810.0f), ImagePointToWorldPoint(857.0f, 776.0f)},
-        {ImagePointToWorldPoint(857.0f, 776.0f), ImagePointToWorldPoint(982.0f, 653.0f)},
-        // Both peak slopes share one endpoint at topCap center (imgX=1196, midpoint of 1165–1227).
-        // This eliminates the 62-px gap where neither slope owned the surface, stopping
-        // ApplySlopeFollow from extrapolating ~9 wu above the topCap block and oscillating.
-        {ImagePointToWorldPoint(982.0f, 653.0f), ImagePointToWorldPoint(1196.0f, 470.0f)},
-        {ImagePointToWorldPoint(1196.0f, 470.0f), ImagePointToWorldPoint(1412.0f, 644.0f)},
-        {ImagePointToWorldPoint(1412.0f, 644.0f), ImagePointToWorldPoint(1296.0f, 766.0f)},
-        // End pinned to centerStemTop: was 771 (0.8 wu below stem top 769), caused oscillation.
-        {ImagePointToWorldPoint(1296.0f, 766.0f), ImagePointToWorldPoint(1227.0f, centerStemTop)},
-        // Removed: {(1109,769)→(982,653)} — inner-left shoulder slope.
-        // It created a triple junction at (982,653) alongside the outer-left and
-        // left-peak slopes. The left-peak slope guard bands cover this zone.
-        {ImagePointToWorldPoint(1542.0f, 776.0f), ImagePointToWorldPoint(1597.0f, 810.0f)},
-        {ImagePointToWorldPoint(1725.0f, 810.0f), ImagePointToWorldPoint(1790.0f, 778.0f)},
+        {ImagePointToWorldPoint(leftLedgeOuterLeft, leftLedgeTopLeftY), ImagePointToWorldPoint(leftLedgeLiquidLeft, leftLedgeLiquidBottomLeftY)},
+        {ImagePointToWorldPoint(leftLedgeLiquidRight, leftLedgeLiquidBottomRightY), ImagePointToWorldPoint(leftLedgeOuterRight, leftLedgeTopRightY)},
+        {ImagePointToWorldPoint(leftLedgeOuterRight, leftLedgeTopRightY), ImagePointToWorldPoint(centerOuterLeftX, centerOuterLeftY)},
+        {ImagePointToWorldPoint(centerOuterLeftX, centerOuterLeftY), ImagePointToWorldPoint(centerPeakLeftX, centerPeakY)},
+        // Inner shoulder slope {(986,648)→(1107,776)} intentionally omitted:
+        // creates a triple junction at (986,648) with the two ascending slopes above,
+        // causing ApplySlopeFollow oscillation — same class of bug as the removed (982,653) junction.
+        {ImagePointToWorldPoint(centerPeakRightX, centerPeakY), ImagePointToWorldPoint(centerOuterRightX, centerOuterRightY)},
+        {ImagePointToWorldPoint(centerOuterRightX, centerOuterRightY), ImagePointToWorldPoint(centerRightShoulderOuterX, centerRightShoulderOuterY)},
+        {ImagePointToWorldPoint(rightLedgeOuterLeft, rightLedgeTopLeftY), ImagePointToWorldPoint(rightLedgeLiquidLeft, rightLedgeLiquidBottomLeftY)},
+        {ImagePointToWorldPoint(rightLedgeLiquidRight, rightLedgeLiquidBottomRightY), ImagePointToWorldPoint(rightLedgeOuterRight, rightLedgeTopRightY)},
 
         // Block 6 lower supports.
-        // Endpoint Y values pinned to adjacent surfaces so ResolveSlopeGrounding
-        // and the block-top detector agree at each seam and do not oscillate.
-        {ImagePointToWorldPoint(baseBridgeBottomLeftX, baseBridgeBottomY), ImagePointToWorldPoint(baseBridgeTopLeftX, baseBridgeTopY)},
-        // Start pinned to baseBridgeTopY: was 1086 (0.8 wu below bridge), caused oscillation.
-        {ImagePointToWorldPoint(centerLowerLeftSupportLeft, baseBridgeTopY), ImagePointToWorldPoint(centerLowerLeftSupportRight, centerLowerLeftSupportTop)},
-        // End pinned to baseBridgeTopY: was 1081 (1.2 wu above bridge), caused pop.
-        {ImagePointToWorldPoint(centerLowerRightSupportLeft, centerLowerRightSupportTop), ImagePointToWorldPoint(centerLowerRightSupportRight, baseBridgeTopY)},
-        {ImagePointToWorldPoint(baseBridgeTopRightX, baseBridgeTopY), ImagePointToWorldPoint(baseBridgeBottomRightX, baseBridgeBottomY)},
+        {ImagePointToWorldPoint(baseBottomLeftX, baseBottomY), ImagePointToWorldPoint(leftBaseRaisedLeft, leftBaseRaisedTop)},
+        {ImagePointToWorldPoint(centerLowerLeftSupportLeft, centerLowerLeftSupportTop), ImagePointToWorldPoint(centerStemLeft, centerStemBottom)},
+        {ImagePointToWorldPoint(centerStemRight, centerStemBottom), ImagePointToWorldPoint(centerLowerRightSupportRight, centerLowerRightSupportTop)},
+        {ImagePointToWorldPoint(rightOuterBaseRaisedLeft, rightOuterBaseRaisedTop), ImagePointToWorldPoint(baseBottomRightX, baseBottomY)},
+    };
+
+    // Ceiling slopes: the outer ascending shell of the central peak structure.
+    // Adding these makes the full underside of each slope a real ceiling collision
+    // surface — characters cannot jump up through the shell from any X position.
+    // This mirrors the 4 floor slopes that form the walkable outer surface; the
+    // same coordinates are safe as both floor and ceiling because ceiling collision
+    // only fires when velocity.y > 0 AND the head is approaching from below, which
+    // is never true when standing on the slope (head is ~50wu above the surface).
+    m_CeilingSlopes = {
+        // Left outer ascending: ledge right tip → left outer junction
+        {ImagePointToWorldPoint(leftLedgeOuterRight, leftLedgeTopRightY),
+         ImagePointToWorldPoint(centerOuterLeftX, centerOuterLeftY)},
+        // Left inner ascending: left outer junction → peak left base
+        {ImagePointToWorldPoint(centerOuterLeftX, centerOuterLeftY),
+         ImagePointToWorldPoint(centerPeakLeftX, centerPeakY)},
+        {ImagePointToWorldPoint(centerOuterLeftX, centerOuterLeftY),
+         ImagePointToWorldPoint(centerLeftCavitySealX, centerLeftCavitySealY)},
+        // Right inner descending: peak right base → right outer junction
+        {ImagePointToWorldPoint(centerPeakRightX, centerPeakY),
+         ImagePointToWorldPoint(centerOuterRightX, centerOuterRightY)},
+        // Right outer descending: right outer junction → right shoulder
+        {ImagePointToWorldPoint(centerOuterRightX, centerOuterRightY),
+         ImagePointToWorldPoint(centerRightShoulderOuterX, centerRightShoulderOuterY)},
+        {ImagePointToWorldPoint(centerLowerLeftSupportLeft, centerLowerLeftSupportTop),
+         ImagePointToWorldPoint(centerLeftUpperWingRight, centerLeftUpperWingBottom)},
+        {ImagePointToWorldPoint(centerLowerRightFillLeft, centerLowerRightFillTop),
+         ImagePointToWorldPoint(centerLowerRightSupportRight, centerLowerRightSupportTop)},
     };
 
     AddCurrentSlopeGuardBands();
@@ -347,19 +412,19 @@ void App::BuildLevel3() {
     AddAnimatedHazardInImageTrap(
         lavaPaths, HazardRect::Type::Lava,
         177.0f, 61.0f,
-        615.0f, 771.0f,
-        851.0f, 769.0f,
-        671.0f, 803.0f,
-        785.0f, 805.0f,
+        609.0f, 780.0f,
+        857.0f, 776.0f,
+        664.0f, 813.0f,
+        792.0f, 810.0f,
         10.2f
     );
     AddAnimatedHazardInImageTrap(
         waterPaths, HazardRect::Type::Water,
         178.0f, 60.0f,
-        1548.0f, 769.0f,
-        1784.0f, 771.0f,
-        1601.0f, 805.0f,
-        1721.0f, 805.0f,
+        1547.0f, 778.0f,
+        1787.0f, 776.0f,
+        1604.0f, 808.0f,
+        1729.0f, 808.0f,
         10.2f
     );
 

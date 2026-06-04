@@ -9,8 +9,10 @@
 namespace {
     constexpr glm::vec2 LEVEL_SELECT_HEXAGON_HOTSPOT_SIZE = {78.0f, 72.0f};
     constexpr glm::vec2 LEVEL_SELECT_TRIANGLE_HOTSPOT_SIZE = {88.0f, 78.0f};
+    constexpr glm::vec2 LEVEL_SELECT_DIAMOND_HOTSPOT_SIZE = {70.0f, 60.0f};
     constexpr glm::vec2 LEVEL_SELECT_HEXAGON_MARKER_SIZE = {116.0f, 104.0f};
     constexpr glm::vec2 LEVEL_SELECT_TRIANGLE_MARKER_SIZE = {112.0f, 102.0f};
+    constexpr glm::vec2 LEVEL_SELECT_DIAMOND_MARKER_SIZE = {118.0f, 100.0f};
 }
 
 void App::UpdateLevelSelect() {
@@ -32,7 +34,7 @@ void App::UpdateLevelSelect() {
             glm::vec2 hoverSize;
         };
 
-        const std::array<ButtonLayout, 4> layouts = {{
+        const std::array<ButtonLayout, 5> layouts = {{
             {
                 1,
                 {-14.0f, -311.0f},
@@ -60,6 +62,13 @@ void App::UpdateLevelSelect() {
                 LEVEL_SELECT_HEXAGON_HOTSPOT_SIZE,
                 GA_RESOURCE_DIR "/Image/Assets/level_hexagon.png",
                 LEVEL_SELECT_HEXAGON_MARKER_SIZE,
+            },
+            {
+                5,
+                {-180.5f, -91.5f},
+                LEVEL_SELECT_DIAMOND_HOTSPOT_SIZE,
+                GA_RESOURCE_DIR "/Image/Assets/level_diamond.png",
+                LEVEL_SELECT_DIAMOND_MARKER_SIZE,
             },
         }};
 

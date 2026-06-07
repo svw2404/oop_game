@@ -2,6 +2,9 @@
 
 #include "Util/Animation.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 void App::BuildLevel3() {
     const std::vector<std::string> lavaPaths = {
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/lava_00.png",
@@ -37,9 +40,9 @@ void App::BuildLevel3() {
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/fan01.png",
         std::string(GA_RESOURCE_DIR) + "/Image/Assets/fan02.png",
     };
-    // Block 6 is rebuilt from the new 2380 x 1760 image-map trace. The trace
-    // follows the visible stone silhouette, so exposed upper edges become floor
-    // slopes and exposed undersides become ceiling slopes.
+    // Block 6 follows the supplied image-map polygon. The polygon traces the
+    // visible stone object; its two pool cavities and the center opening remain
+    // playable voids.
     constexpr float topLeftSlabLeft = 242.0f;
     constexpr float topLeftSlabRight = 1101.0f;
     constexpr float topLeftSlabTop = 219.0f;
@@ -85,6 +88,10 @@ void App::BuildLevel3() {
     constexpr float diamondLowerLeftY = 763.0f;
     constexpr float diamondLowerRightX = 1286.0f;
     constexpr float diamondLowerY = 768.0f;
+    constexpr float diamondOpeningLeft = 1164.0f;
+    constexpr float diamondOpeningRight = 1235.0f;
+    constexpr float diamondOpeningTop = 584.0f;
+    constexpr float diamondOpeningBottom = 714.0f;
 
     constexpr float centerStemLeft = 1170.0f;
     constexpr float centerStemRight = 1227.0f;
@@ -145,84 +152,165 @@ void App::BuildLevel3() {
     m_SolidBlocks.push_back(ImageRectToWorldRect(2039.0f, 899.0f, 2345.0f, 960.0f));
 
     // ---------------------------------------------------------------------
-    // Block 6: polygon-derived main structure.
+    // Block 6: polygon-derived central object.
     // ---------------------------------------------------------------------
+
+    // Sloped parts are filled with conservative vertical strips. Each strip is
+    // inset from both traced edges, so its AABB cannot protrude into playable
+    // air or compete with the smooth floor/ceiling slope at the boundary.
+    auto addConservativeSlopeFill = [this](
+        float left,
+        float right,
+        float topLeft,
+        float topRight,
+        float bottomLeft,
+        float bottomRight
+    ) {
+        constexpr float maxStripWidth = 24.0f;
+        constexpr float surfaceInset = 1.5f;
+
+        const int stripCount = std::max(
+            1,
+            static_cast<int>(std::ceil((right - left) / maxStripWidth))
+        );
+        auto interpolate = [left, right](float x, float yLeft, float yRight) {
+            const float t = (x - left) / (right - left);
+            return yLeft + (yRight - yLeft) * t;
+        };
+
+        for (int i = 0; i < stripCount; ++i) {
+            const float x0 =
+                left + (right - left) * static_cast<float>(i) / static_cast<float>(stripCount);
+            const float x1 =
+                left + (right - left) * static_cast<float>(i + 1) / static_cast<float>(stripCount);
+            const float top = std::max(
+                interpolate(x0, topLeft, topRight),
+                interpolate(x1, topLeft, topRight)
+            ) + surfaceInset;
+            const float bottom = std::min(
+                interpolate(x0, bottomLeft, bottomRight),
+                interpolate(x1, bottomLeft, bottomRight)
+            ) - surfaceInset;
+
+            if (bottom - top >= 2.0f) {
+                m_SolidBlocks.push_back(ImageRectToWorldRect(x0, top, x1, bottom));
+            }
+        }
+    };
+
+    // Top slabs and their two narrow hanging pillars.
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        topLeftSlabLeft, topLeftSlabTop, topLeftSlabRight, topSlabCoreBottom, false
+        topLeftSlabLeft, topLeftSlabTop + 2.0f,
+        topLeftSlabRight, topSlabCoreBottom, false
     ));
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        topRightSlabLeft, topRightSlabTop, topRightSlabRight, topSlabCoreBottom, false
+        topRightSlabLeft, topRightSlabTop + 2.0f,
+        topRightSlabRight, topSlabCoreBottom, false
+    ));
+    m_SolidBlocks.push_back(ImageRectToWorldRect(
+        leftPillarLeft, leftPillarTop, leftPillarRight, 282.0f
+    ));
+    m_SolidBlocks.push_back(ImageRectToWorldRect(
+        552.0f, 282.0f, 605.0f, baseTopY
+    ));
+    m_SolidBlocks.push_back(ImageRectToWorldRect(
+        rightPillarLeft, rightPillarTop, rightPillarRight, 276.0f
+    ));
+    m_SolidBlocks.push_back(ImageRectToWorldRect(
+        1792.0f, 276.0f, 1844.0f, baseTopY
     ));
 
+    // Pool shelves. The strips stay between the visible top profile and the
+    // traced underside; the liquid cavities are therefore left open.
+    addConservativeSlopeFill(609.0f, 670.0f, 776.0f, 810.0f, 828.0f, 829.0f);
+    addConservativeSlopeFill(670.0f, 796.0f, 810.0f, 810.0f, 829.0f, 832.0f);
+    addConservativeSlopeFill(796.0f, 849.0f, 810.0f, 776.0f, 832.0f, 833.0f);
+    m_SolidBlocks.push_back(ImageRectToWorldRect(849.0f, 776.0f, 855.0f, 833.0f));
+
+    addConservativeSlopeFill(1546.0f, 1601.0f, 776.0f, 803.0f, 826.0f, 826.5f);
+    addConservativeSlopeFill(1601.0f, 1727.0f, 803.0f, 801.0f, 826.5f, 827.5f);
+    addConservativeSlopeFill(1727.0f, 1792.0f, 801.0f, 770.0f, 827.5f, 828.0f);
+
+    // Diamond shell. Its lower boundary changes direction at x=1099 and
+    // x=1286, so each wing is split there instead of approximated by broad
+    // shoulder rectangles.
+    const float diamondTopAt1099 =
+        diamondMiddleY +
+        (diamondTopY - diamondMiddleY) *
+        ((diamondLowerLeftX - diamondLeftX) / (diamondTopLeftX - diamondLeftX));
+    addConservativeSlopeFill(
+        diamondLeftX, diamondLowerLeftX,
+        diamondMiddleY, diamondTopAt1099,
+        diamondMiddleY, diamondLowerLeftY
+    );
+    addConservativeSlopeFill(
+        diamondLowerLeftX, diamondTopLeftX,
+        diamondTopAt1099, diamondTopY,
+        diamondLowerLeftY, 768.0f
+    );
+
+    const float diamondTopAt1286 =
+        diamondTopY +
+        (diamondMiddleY - diamondTopY) *
+        ((diamondLowerRightX - diamondTopRightX) / (diamondRightX - diamondTopRightX));
+    addConservativeSlopeFill(
+        diamondTopRightX, diamondLowerRightX,
+        diamondTopY, diamondTopAt1286,
+        diamondLowerY, diamondLowerY
+    );
+    addConservativeSlopeFill(
+        diamondLowerRightX, diamondRightX,
+        diamondTopAt1286, diamondMiddleY,
+        diamondLowerY, diamondMiddleY
+    );
+
+    // The visible rectangular opening is real playable space. These two caps
+    // provide its ceiling and floor while the wing fills form its side walls.
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        leftPillarLeft, leftPillarTop, leftPillarRight, baseTopY
+        diamondOpeningLeft, diamondTopY,
+        diamondOpeningRight, diamondOpeningTop
     ));
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        rightPillarLeft, rightPillarTop, rightPillarRight, baseTopY
+        diamondOpeningLeft, diamondOpeningBottom,
+        diamondOpeningRight, diamondLowerY
     ));
 
-    // Pool ledges start at the liquid beds. The lips and undersides are slopes.
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        leftLedgeLeft, leftLedgeBedY, leftLedgeRight, leftLedgeBottomY, false
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        rightLedgeLeft, rightLedgeBedLeftY, rightLedgeRight, rightLedgeBottomY, false
-    ));
-
-    // Diamond fills remain inside the traced shell. Their tops are below the
-    // upper slopes, avoiding competing ground surfaces.
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        diamondTopLeftX, diamondTopY, diamondTopRightX, diamondLowerY, false
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        1023.0f, 612.0f, 1061.0f, 687.0f, false
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        1061.0f, 574.0f, diamondLowerLeftX, 725.0f, false
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        diamondLowerLeftX, 535.0f, diamondTopLeftX, diamondLowerLeftY, false
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        diamondTopRightX, 524.0f, diamondLowerRightX, diamondLowerY, false
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        diamondLowerRightX, 566.0f, 1326.0f, 728.0f, false
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        1326.0f, 609.0f, 1366.0f, 688.0f, false
-    ));
-
-    // The narrow stem is the only full-height center rectangle.
+    // Narrow stem and lower mound.
     m_SolidBlocks.push_back(ImageRectToWorldRect(
         centerStemLeft, centerStemTop, centerStemRight, centerStemBottom
     ));
+    addConservativeSlopeFill(
+        1044.0f, centerStemLeft,
+        baseTopY, centerStemBottom,
+        baseCoreTopY, baseCoreTopY
+    );
+    addConservativeSlopeFill(
+        centerStemRight, 1359.0f,
+        950.0f, baseCoreTopY,
+        baseCoreTopY, baseCoreTopY
+    );
 
-    // Internal wedge fills stay strictly below the two lower walkable slopes.
+    // Base strips and their two outer ramps. Splitting the base at the mound
+    // endpoints avoids thin overlapping top slivers.
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        1086.0f, 1040.0f, 1128.0f, baseCoreTopY
+        baseLeftRampTopX, baseTopY, 1044.0f, baseBottomY
     ));
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        1128.0f, 996.0f, centerStemLeft, baseCoreTopY
+        1044.0f, baseCoreTopY, 1359.0f, baseBottomY
     ));
     m_SolidBlocks.push_back(ImageRectToWorldRect(
-        centerStemRight, 995.0f, 1271.0f, baseCoreTopY
+        1359.0f, baseCoreTopY, baseRightRampTopX, baseBottomY
     ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        1271.0f, 1040.0f, 1315.0f, baseCoreTopY
-    ));
-
-    // The base core meets the right ramp at y=1085. Full-depth left sections
-    // retain the traced y=1083 floor without adding thin sliver rectangles.
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        baseLeftRampTopX, baseCoreTopY, baseRightRampTopX, baseBottomY
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        baseLeftRampTopX, baseTopY, 552.0f, baseBottomY
-    ));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(
-        605.0f, baseTopY, 1044.0f, baseBottomY
-    ));
+    addConservativeSlopeFill(
+        baseLeftTipX, baseLeftRampTopX,
+        1135.0f, baseTopY,
+        baseBottomY, baseBottomY
+    );
+    addConservativeSlopeFill(
+        baseRightRampTopX, baseRightTipX,
+        baseRightRampTopY, baseBottomY,
+        baseBottomY, baseBottomY
+    );
 
     m_Slopes = {
         // Block 1
@@ -343,7 +431,8 @@ void App::BuildLevel3() {
         796.0f, 1366.0f,
         10.2f
     );
-    // Upper-left small pool on center floating structure = lava per level design.
+    // The rebuilt central object has exactly two liquids: lava on the left and
+    // water on the right. The other four traps belong to unrelated lower blocks.
     AddAnimatedHazardInImageTrap(
         lavaPaths, HazardRect::Type::Lava,
         177.0f, 61.0f,

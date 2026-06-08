@@ -57,6 +57,7 @@ void App::Update() {
         UpdateGreenPlatform2();
         UpdateLevel2HiddenPlatform();
         UpdateLevel2HangingPlatform();
+        UpdateLevel4ChainPlatforms();
         UpdateFans();
         CheckHazards();
         UpdateDeathSequence();

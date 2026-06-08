@@ -90,6 +90,14 @@ void App::Start() {
     m_Level2HangingPlatform2.reset();
     m_Level2HangingChain.reset();
     m_Level2HangingChain2.reset();
+    m_Level4ChainPlatformTop.reset();
+    m_Level4ChainPlatformBottom.reset();
+    m_Level4ChainTop.reset();
+    m_Level4ChainBottom.reset();
+    m_Level4ChainConnectTop.reset();
+    m_Level4ChainConnectBottom.reset();
+    m_Level4HorizontalChainLinks.clear();
+    m_Level4HorizontalChainBasePositions.clear();
     m_Level2TopButtonLeft.reset();
     m_Level2TopButtonRight.reset();
     m_Cube.reset();
@@ -160,14 +168,28 @@ void App::Start() {
     m_HasLevel2HiddenPlatformBlock = false;
     m_HasLevel2HangingPlatformBlock = false;
     m_HasLevel2HangingPlatformSlope = false;
+    m_HasLevel4ChainPlatforms = false;
+    m_HasLevel4ChainPlatformTop = false;
+    m_HasLevel4ChainPlatformBottom = false;
+    m_HasLevel4ChainTopAnchor = false;
+    m_HasLevel4ChainBottomAnchor = false;
     m_Level2HiddenPlatformBlockIndex = 0;
     m_Level2HangingPlatformBlockIndex = 0;
     m_Level2HangingPlatformSlopeIndex = 0;
     m_Level2HangingPlatformSlopeIndex2 = 0;
+    m_Level4ChainPlatformTopBlockIndex = 0;
+    m_Level4ChainPlatformBottomBlockIndex = 0;
     m_Level2TopButtonLeftPressVisual = 0.0f;
     m_Level2TopButtonRightPressVisual = 0.0f;
     m_Level2HangingPlatformAngle = 0.0f;
     m_Level2HangingPlatformAngle2 = 0.0f;
+    m_Level4ChainPlatformOffset = 0.0f;
+    m_Level4ChainPlatformBottomTravelScale = 1.0f;
+    m_Level4ChainTopXOffset = 0.0f;
+    m_Level4ChainBottomXOffset = 0.0f;
+    m_Level4ChainTopAnchorY = 0.0f;
+    m_Level4ChainBottomAnchorY = 0.0f;
+    m_Level4HorizontalChainAnimPhase = 0.0f;
 
     if (!m_GameplayMusic) {
         m_GameplayMusic = std::make_unique<Util::BGM>(
@@ -307,15 +329,14 @@ void App::Start() {
         m_Fireboy = std::make_shared<HeadBodyCharacter>(
             moveBodyPaths, runHeadPaths, 10.0f, 120, true, 120, true
         );
-        // Character size should stay consistent across levels; the background
-        // image resolution already changes the terrain scale via image->world mapping.
-        m_Fireboy->SetSize({36.0f, 40.0f});
+        const float characterVisualScale = (m_ActiveLevelIndex == 4) ? 1.15f : 1.0f;
+        m_Fireboy->SetSize({36.0f * characterVisualScale, 40.0f * characterVisualScale});
         m_Fireboy->SetHeadScale(1.25f / 1.4f);
         m_Fireboy->SetBodySize({
-            (30.0f / 1.4f),
-            (31.0f / 1.4f)
+            (30.0f / 1.4f) * characterVisualScale,
+            (31.0f / 1.4f) * characterVisualScale
         });
-        m_Fireboy->SetHeadOffset({0.0f, -4.0f});
+        m_Fireboy->SetHeadOffset({0.0f, -4.0f * characterVisualScale});
         RecalculateFireboyCollisionBoxes();
 
         m_Fireboy->SetIdleBodyImage(bodyPaths.front());
@@ -463,14 +484,15 @@ void App::Start() {
         m_Watergirl = std::make_shared<HeadBodyCharacter>(
             moveBodyPaths, runHeadPaths, 10.0f, 120, true, 120, true
         );
-        m_Watergirl->SetSize({36.0f, 40.0f});
+        const float characterVisualScale = (m_ActiveLevelIndex == 4) ? 1.15f : 1.0f;
+        m_Watergirl->SetSize({36.0f * characterVisualScale, 40.0f * characterVisualScale});
         m_Watergirl->SetHeadScale(1.25f / 1.4f);
         m_Watergirl->SetMoveHeadWidthScale(1.18f);
         m_Watergirl->SetBodySize({
-            (30.0f / 1.4f),
-            (31.0f / 1.4f)
+            (30.0f / 1.4f) * characterVisualScale,
+            (31.0f / 1.4f) * characterVisualScale
         });
-        m_Watergirl->SetHeadOffset({0.0f, -4.0f});
+        m_Watergirl->SetHeadOffset({0.0f, -4.0f * characterVisualScale});
         RecalculateWatergirlCollisionBoxes();
 
         m_Watergirl->SetIdleBodyImage(bodyPaths.front());

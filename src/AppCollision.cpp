@@ -1140,8 +1140,16 @@ void App::UpdateGreenPlatform() {
         return;
     }
 
+    const bool level4ButtonPressed =
+        m_ActiveLevelIndex == 4 &&
+        (CharacterPressesRectFromAbove(m_Fireboy, m_FireboyCollision, m_GreenButtonAfterHitbox) ||
+         CharacterPressesRectFromAbove(m_Watergirl, m_WatergirlCollision, m_GreenButtonAfterHitbox) ||
+         CubePressesRectFromAbove(m_GreenButtonAfterHitbox));
     const SolidRect oldPlatform = m_GreenPlatformCurrentRect;
-    const SolidRect& target = m_GreenSwitchOn ? m_GreenPlatformPressedRect : m_GreenPlatformRestRect;
+    const SolidRect& target =
+        ((m_ActiveLevelIndex == 4) ? level4ButtonPressed : m_GreenSwitchOn)
+            ? m_GreenPlatformPressedRect
+            : m_GreenPlatformRestRect;
     m_GreenPlatformCurrentRect.center.y = MoveToward(
         m_GreenPlatformCurrentRect.center.y,
         target.center.y,
@@ -1181,7 +1189,9 @@ void App::UpdateGreenPlatform2() {
         CharacterPressesRectFromAbove(m_Fireboy, m_FireboyCollision, m_GreenButtonAfterHitbox2) ||
         CharacterPressesRectFromAbove(m_Watergirl, m_WatergirlCollision, m_GreenButtonAfterHitbox2) ||
         CubePressesRectFromAbove(m_GreenButtonAfterHitbox2);
-    const bool pressed = leftPressed || rightPressed;
+    const bool pressed = (m_ActiveLevelIndex == 4)
+        ? m_GreenSwitchOn
+        : (leftPressed || rightPressed);
     m_GreenButtonPressed = pressed;
     const SolidRect oldPlatform = m_GreenPlatformCurrentRect2;
     const SolidRect& target = pressed ? m_GreenPlatformPressedRect2 : m_GreenPlatformRestRect2;
@@ -1513,4 +1523,187 @@ void App::UpdateLevel2HangingPlatform() {
         m_Level2HangingPlatformSlopeIndex2,
         m_Level2HangingPlatformAngle2
     );
+}
+
+void App::UpdateLevel4ChainPlatforms() {
+    if (!m_HasLevel4ChainPlatforms ||
+        (!m_HasLevel4ChainPlatformTop && !m_HasLevel4ChainPlatformBottom) ||
+        (m_HasLevel4ChainPlatformTop && m_Level4ChainPlatformTopBlockIndex >= m_SolidBlocks.size()) ||
+        (m_HasLevel4ChainPlatformBottom && m_Level4ChainPlatformBottomBlockIndex >= m_SolidBlocks.size())) {
+        return;
+    }
+
+    auto cubeStandsOn = [&](const SolidRect& platform) {
+        if (!m_HasCubeBlock) {
+            return false;
+        }
+
+        const float cubeBottom = m_CubeRect.center.y - m_CubeRect.size.y * 0.5f;
+        const float platformTop = platform.center.y + platform.size.y * 0.5f;
+        return cubeBottom >= platformTop - m_GroundSnapTolerance &&
+            cubeBottom <= platformTop + m_GroundStickTolerance &&
+            m_CubeRect.center.x + m_CubeRect.size.x * 0.5f > platform.center.x - platform.size.x * 0.5f &&
+            m_CubeRect.center.x - m_CubeRect.size.x * 0.5f < platform.center.x + platform.size.x * 0.5f;
+    };
+
+    const bool topLoaded =
+        m_HasLevel4ChainPlatformTop &&
+        cubeStandsOn(m_Level4ChainPlatformTopCurrentRect);
+    const bool bottomLoaded =
+        m_HasLevel4ChainPlatformBottom &&
+        cubeStandsOn(m_Level4ChainPlatformBottomCurrentRect);
+
+    float targetOffset = 0.0f;
+    if (m_HasLevel4ChainPlatformTop && m_HasLevel4ChainPlatformBottom && topLoaded != bottomLoaded) {
+        targetOffset = topLoaded
+            ? -m_Level4ChainPlatformMaxOffset
+            : m_Level4ChainPlatformMaxOffset;
+    }
+    else if (m_HasLevel4ChainPlatformTop && !m_HasLevel4ChainPlatformBottom && topLoaded) {
+        targetOffset = -m_Level4ChainPlatformMaxOffset;
+    }
+    else if (!m_HasLevel4ChainPlatformTop && m_HasLevel4ChainPlatformBottom && bottomLoaded) {
+        targetOffset = m_Level4ChainPlatformMaxOffset;
+    }
+
+    const float oldOffset = m_Level4ChainPlatformOffset;
+    m_Level4ChainPlatformOffset = MoveToward(
+        m_Level4ChainPlatformOffset,
+        targetOffset,
+        m_Level4ChainPlatformSpeed
+    );
+
+    if (std::abs(m_Level4ChainPlatformOffset - oldOffset) <= 0.001f) {
+        for (std::size_t i = 0;
+             i < m_Level4HorizontalChainLinks.size() &&
+             i < m_Level4HorizontalChainBasePositions.size();
+             ++i) {
+            if (!m_Level4HorizontalChainLinks[i]) {
+                continue;
+            }
+
+            m_Level4HorizontalChainLinks[i]->SetPosition(m_Level4HorizontalChainBasePositions[i]);
+            m_Level4HorizontalChainLinks[i]->SetVisible(true);
+            m_Level4HorizontalChainLinks[i]->m_Transform.rotation = 1.57079632679f;
+        }
+        return;
+    }
+
+    const SolidRect oldTop = m_Level4ChainPlatformTopCurrentRect;
+    const SolidRect oldBottom = m_Level4ChainPlatformBottomCurrentRect;
+
+    if (m_HasLevel4ChainPlatformTop) {
+        m_Level4ChainPlatformTopCurrentRect = m_Level4ChainPlatformTopRestRect;
+        m_Level4ChainPlatformTopCurrentRect.center.y += m_Level4ChainPlatformOffset;
+        m_SolidBlocks[m_Level4ChainPlatformTopBlockIndex] = m_Level4ChainPlatformTopCurrentRect;
+    }
+    if (m_HasLevel4ChainPlatformBottom) {
+        m_Level4ChainPlatformBottomCurrentRect = m_Level4ChainPlatformBottomRestRect;
+        m_Level4ChainPlatformBottomCurrentRect.center.y -=
+            m_Level4ChainPlatformOffset * m_Level4ChainPlatformBottomTravelScale;
+        m_SolidBlocks[m_Level4ChainPlatformBottomBlockIndex] = m_Level4ChainPlatformBottomCurrentRect;
+    }
+
+    const float topDeltaY = m_Level4ChainPlatformTopCurrentRect.center.y - oldTop.center.y;
+    const float bottomDeltaY = m_Level4ChainPlatformBottomCurrentRect.center.y - oldBottom.center.y;
+    if (!m_Level4HorizontalChainLinks.empty() && !m_Level4HorizontalChainBasePositions.empty()) {
+        const float linkStep = m_Level4HorizontalChainBasePositions.size() > 1
+            ? std::abs(m_Level4HorizontalChainBasePositions[1].x - m_Level4HorizontalChainBasePositions[0].x)
+            : 12.0f;
+        const float firstX = m_Level4HorizontalChainBasePositions.front().x;
+        const float lastX = m_Level4HorizontalChainBasePositions[
+            std::min(m_Level4HorizontalChainLinks.size(), m_Level4HorizontalChainBasePositions.size()) - 1
+        ].x;
+        const float travelWidth = std::max(1.0f, (lastX - firstX) + linkStep);
+        m_Level4HorizontalChainAnimPhase = std::fmod(
+            m_Level4HorizontalChainAnimPhase - (m_Level4ChainPlatformOffset - oldOffset) * 1.8f,
+            travelWidth
+        );
+        if (m_Level4HorizontalChainAnimPhase < 0.0f) {
+            m_Level4HorizontalChainAnimPhase += travelWidth;
+        }
+
+        for (std::size_t i = 0;
+             i < m_Level4HorizontalChainLinks.size() &&
+             i < m_Level4HorizontalChainBasePositions.size();
+             ++i) {
+            if (!m_Level4HorizontalChainLinks[i]) {
+                continue;
+            }
+
+            float x = firstX + std::fmod(
+                (m_Level4HorizontalChainBasePositions[i].x - firstX) + m_Level4HorizontalChainAnimPhase,
+                travelWidth
+            );
+            if (x > lastX) {
+                x = firstX + (x - lastX);
+            }
+            m_Level4HorizontalChainLinks[i]->SetVisible(true);
+            m_Level4HorizontalChainLinks[i]->SetPosition({
+                x,
+                m_Level4HorizontalChainBasePositions[i].y
+            });
+            m_Level4HorizontalChainLinks[i]->m_Transform.rotation = 1.57079632679f;
+        }
+    }
+
+    if (m_HasLevel4ChainPlatformTop && m_Level4ChainPlatformTop) {
+        m_Level4ChainPlatformTop->SetPosition(m_Level4ChainPlatformTopCurrentRect.center);
+    }
+    if (m_HasLevel4ChainPlatformBottom && m_Level4ChainPlatformBottom) {
+        m_Level4ChainPlatformBottom->SetPosition(m_Level4ChainPlatformBottomCurrentRect.center);
+    }
+    if (m_HasLevel4ChainPlatformTop && m_Level4ChainConnectTop) {
+        m_Level4ChainConnectTop->SetPosition(m_Level4ChainConnectTop->GetPosition() + glm::vec2{0.0f, topDeltaY});
+    }
+    if (m_HasLevel4ChainPlatformBottom && m_Level4ChainConnectBottom) {
+        m_Level4ChainConnectBottom->SetPosition(m_Level4ChainConnectBottom->GetPosition() + glm::vec2{0.0f, bottomDeltaY});
+    }
+    if (m_HasLevel4ChainPlatformTop && m_Level4ChainTop) {
+        const float anchorY = m_HasLevel4ChainTopAnchor
+            ? m_Level4ChainTopAnchorY
+            : oldTop.center.y + oldTop.size.y * 2.0f;
+        const float chainEndY = m_Level4ChainConnectTop
+            ? m_Level4ChainConnectTop->GetPosition().y
+            : m_Level4ChainPlatformTopCurrentRect.center.y +
+                m_Level4ChainPlatformTopCurrentRect.size.y * 0.5f;
+        const glm::vec2 chainSize = m_Level4ChainTop->GetSize();
+        m_Level4ChainTop->SetSize({
+            chainSize.x,
+            std::max(1.0f, std::abs(anchorY - chainEndY))
+        });
+        m_Level4ChainTop->SetPosition({
+            m_Level4ChainPlatformTopCurrentRect.center.x + m_Level4ChainTopXOffset,
+            (anchorY + chainEndY) * 0.5f
+        });
+    }
+    if (m_HasLevel4ChainPlatformBottom && m_Level4ChainBottom) {
+        const float anchorY = m_HasLevel4ChainBottomAnchor
+            ? m_Level4ChainBottomAnchorY
+            : oldBottom.center.y + oldBottom.size.y * 2.0f;
+        const float chainEndY = m_Level4ChainConnectBottom
+            ? m_Level4ChainConnectBottom->GetPosition().y
+            : m_Level4ChainPlatformBottomCurrentRect.center.y +
+                m_Level4ChainPlatformBottomCurrentRect.size.y * 0.5f;
+        const glm::vec2 chainSize = m_Level4ChainBottom->GetSize();
+        m_Level4ChainBottom->SetSize({
+            chainSize.x,
+            std::max(1.0f, std::abs(anchorY - chainEndY))
+        });
+        m_Level4ChainBottom->SetPosition({
+            m_Level4ChainPlatformBottomCurrentRect.center.x + m_Level4ChainBottomXOffset,
+            (anchorY + chainEndY) * 0.5f
+        });
+    }
+
+    if (m_HasLevel4ChainPlatformTop) {
+        CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldTop, topDeltaY);
+        CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldTop, topDeltaY);
+        CarryCubeWithPlatform(oldTop, topDeltaY);
+    }
+    if (m_HasLevel4ChainPlatformBottom) {
+        CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldBottom, bottomDeltaY);
+        CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldBottom, bottomDeltaY);
+        CarryCubeWithPlatform(oldBottom, bottomDeltaY);
+    }
 }

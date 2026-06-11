@@ -193,7 +193,9 @@ void App::BuildLevel3() {
             ) - surfaceInset;
 
             if (bottom - top >= 2.0f) {
-                m_SolidBlocks.push_back(ImageRectToWorldRect(x0, top, x1, bottom));
+                SolidRect fill = ImageRectToWorldRect(x0, top, x1, bottom);
+                fill.isSlopeFill = true;
+                m_SolidBlocks.push_back(fill);
             }
         }
     };

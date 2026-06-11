@@ -21,7 +21,7 @@ namespace {
     constexpr float AIR_RUN_EPSILON = 0.25f;
     constexpr float MAX_AIR_HEAD_ROTATION = 0.45f;
     constexpr float FIXED_TIME_STEP = 1.0f / 60.0f;
-    constexpr float DESCENDING_PLATFORM_HEAD_CLEARANCE = 2.0f;
+    constexpr float LEVEL2_MAX_AIR_HORIZONTAL_SPEED = 2.0f;
 }
 
 void App::Update() {
@@ -30,12 +30,26 @@ void App::Update() {
     // 2. Update dynamic world objects first (cube/platform/switch)
     // 3. Process character input + physics
     // 4. Resolve hazards, pickups, doors, and victory
+    UpdateVolumeControl();
+    UpdateTimerHud();
+
+    if (HandlePauseToggle()) {
+        m_Root.Update();
+        return;
+    }
+
+    if (m_GamePaused) {
+        UpdatePauseOverlay();
+        m_Root.Update();
+        return;
+    }
+
     if (IsFailOverlayVisible()) {
         m_VictoryOverlayVisible = false;
         UpdateVictoryOverlayVisuals();
         UpdateFailOverlay();
 
-        if (Util::Input::IsKeyPressed(Util::Keycode::ESCAPE) || Util::Input::IfExit()) {
+        if (Util::Input::IfExit()) {
             m_CurrentState = State::END;
         }
 
@@ -84,7 +98,7 @@ void App::Update() {
         UpdateVictorySequence();
     }
 
-    if (Util::Input::IsKeyPressed(Util::Keycode::ESCAPE) || Util::Input::IfExit()) {
+    if (Util::Input::IfExit()) {
         m_CurrentState = State::END;
     }
 
@@ -197,6 +211,10 @@ void App::HandleCharacterInput(
     const float liquidSpeedScale = inLiquid ? m_LiquidMoveSpeedScale : 1.0f;
     const float liquidAccelerationScale = inLiquid ? m_LiquidAccelerationScale : 1.0f;
     const float liquidDecelerationScale = inLiquid ? m_LiquidDecelerationScale : 1.0f;
+    const bool useLevel2AirLimit = m_ActiveLevelIndex == 2 && !onGround;
+    const float moveSpeed = useLevel2AirLimit
+        ? std::min(m_MoveSpeed, LEVEL2_MAX_AIR_HORIZONTAL_SPEED)
+        : m_MoveSpeed;
 
     const float acceleration =
         (onGround ? m_GroundAcceleration : m_AirAcceleration) * liquidAccelerationScale;
@@ -204,7 +222,7 @@ void App::HandleCharacterInput(
         (onGround ? m_GroundDeceleration : m_AirDeceleration) * liquidDecelerationScale;
 
     if (inputDir != 0.0f) {
-        const float targetSpeed = inputDir * m_MoveSpeed * liquidSpeedScale;
+        const float targetSpeed = inputDir * moveSpeed * liquidSpeedScale;
         if (velocity.x < targetSpeed) {
             velocity.x = std::min(targetSpeed, velocity.x + acceleration);
         }
@@ -257,9 +275,17 @@ void App::HandleCharacterInput(
     }
 
     const float attemptedX = newPos.x;
-    ResolveHorizontalCollisions(oldPos, newPos, profile);
+    ResolveHorizontalCollisions(oldPos, newPos, profile, onGround);
     if (std::abs(newPos.x - attemptedX) > 0.001f) {
-        velocity.x = 0.0f;
+        const float requestedDeltaX = attemptedX - oldPos.x;
+        const float resolvedDeltaX = newPos.x - oldPos.x;
+        const float usefulProgress = std::min(0.35f, std::abs(requestedDeltaX) * 0.25f);
+        const bool keptDirection =
+            requestedDeltaX * resolvedDeltaX > 0.0f &&
+            std::abs(resolvedDeltaX) >= usefulProgress;
+        if (!keptDirection) {
+            velocity.x = 0.0f;
+        }
     }
     if (onGround && newPos.x != oldPos.x) {
         const float preSnapY = newPos.y;
@@ -278,8 +304,17 @@ void App::HandleCharacterInput(
     if (Util::Input::IsKeyPressed(jumpKey) && onGround) {
         velocity.y = m_JumpSpeed * (inLiquid ? m_LiquidJumpScale : 1.0f);
         if (inputDir != 0.0f) {
-            const float jumpLaunchMin = m_JumpHorizontalLaunchMin * liquidSpeedScale;
-            const float jumpLaunchMax = m_JumpHorizontalLaunchMax * liquidSpeedScale;
+            const bool useLevel2JumpLimit = m_ActiveLevelIndex == 2;
+            const float jumpLaunchMin =
+                (useLevel2JumpLimit
+                    ? LEVEL2_MAX_AIR_HORIZONTAL_SPEED
+                    : m_JumpHorizontalLaunchMin) *
+                liquidSpeedScale;
+            const float jumpLaunchMax =
+                (useLevel2JumpLimit
+                    ? LEVEL2_MAX_AIR_HORIZONTAL_SPEED
+                    : m_JumpHorizontalLaunchMax) *
+                liquidSpeedScale;
 
             if (inputDir > 0.0f) {
                 velocity.x = std::clamp(
@@ -346,6 +381,13 @@ void App::UpdateCharacterPhysics(
         velocity.x *= m_LiquidVelocityDrag;
         velocity.y *= m_LiquidVelocityDrag;
     }
+    if (m_ActiveLevelIndex == 2 && !onGround) {
+        velocity.x = std::clamp(
+            velocity.x,
+            -LEVEL2_MAX_AIR_HORIZONTAL_SPEED,
+            LEVEL2_MAX_AIR_HORIZONTAL_SPEED
+        );
+    }
     newPos.y += velocity.y;
 
     bool hitCeiling = false;
@@ -381,7 +423,8 @@ void App::UpdateCharacterMotionState(
     const glm::vec2 pos = character->GetPosition();
     const auto prevIter = s_LastPos.find(character.get());
     const glm::vec2 prev = (prevIter == s_LastPos.end()) ? pos : prevIter->second;
-    const float moved = glm::length(pos - prev);
+    // Vertical platform motion should not make an idle character use the run animation.
+    const float moved = std::abs(pos.x - prev.x);
 
     if (!onGround) {
         if (std::abs(velocity.x) > AIR_RUN_EPSILON) {
@@ -479,6 +522,7 @@ void App::UpdateExitDoors() {
     if (m_VictoryPhase == VictoryPhase::None &&
         fireboyReadyForVictory &&
         watergirlReadyForVictory) {
+        MarkActiveLevelCompleted();
         m_VictoryPhase = VictoryPhase::RunIntoDoor;
         m_VictoryTimer = 0.0f;
         if (m_LevelCompleteTimeMs <= 0.0f) {
@@ -1192,7 +1236,7 @@ void App::UpdateCubePhysics() {
         }
 
         const auto& block = m_SolidBlocks[i];
-        if (!CheckAABB(m_CubeRect.center, m_CubeRect.size, block.center, block.size)) {
+        if (block.isSlopeGuard) {
             continue;
         }
 
@@ -1200,10 +1244,21 @@ void App::UpdateCubePhysics() {
         const float oldTop = cubeBeforeVertical.center.y + cubeBeforeVertical.size.y * 0.5f;
         const float newBottom = m_CubeRect.center.y - m_CubeRect.size.y * 0.5f;
         const float newTop = m_CubeRect.center.y + m_CubeRect.size.y * 0.5f;
+        const float cubeLeft = m_CubeRect.center.x - m_CubeRect.size.x * 0.5f;
+        const float cubeRight = m_CubeRect.center.x + m_CubeRect.size.x * 0.5f;
+        const float blockLeft = block.center.x - block.size.x * 0.5f;
+        const float blockRight = block.center.x + block.size.x * 0.5f;
         const float blockTop = block.center.y + block.size.y * 0.5f;
         const float blockBottom = block.center.y - block.size.y * 0.5f;
+        const bool horizontalOverlap = cubeRight > blockLeft && cubeLeft < blockRight;
+        if (!horizontalOverlap) {
+            continue;
+        }
 
-        if (m_CubeVelocity.y <= 0.0f &&
+        // Swept landing catches thin floors and moving platforms even when the
+        // cube travels completely through their AABB during one frame.
+        if (!block.isSlopeFill &&
+            m_CubeVelocity.y <= 0.0f &&
             oldBottom >= blockTop - m_GroundSnapTolerance &&
             newBottom <= blockTop + m_GroundSnapTolerance) {
             bestGroundY = std::max(bestGroundY, blockTop);
@@ -1211,6 +1266,7 @@ void App::UpdateCubePhysics() {
         }
         else if (block.blockBottom &&
             m_CubeVelocity.y > 0.0f &&
+            CheckAABB(m_CubeRect.center, m_CubeRect.size, block.center, block.size) &&
             oldTop <= blockBottom + m_GroundSnapTolerance &&
             newTop >= blockBottom - m_GroundSnapTolerance) {
             m_CubeRect.center.y = blockBottom - m_CubeRect.size.y * 0.5f;
@@ -1275,8 +1331,19 @@ void App::ResolveCubeHorizontalCollisions(
         }
 
         const auto& block = m_SolidBlocks[i];
+        if (block.isSlopeGuard) {
+            continue;
+        }
         if (!cubeCollides(newCube, block)) {
             continue;
+        }
+        if (block.isSlopeFill) {
+            float slopeY = 0.0f;
+            const float newBottom = newCube.center.y - newCube.size.y * 0.5f;
+            if (FindBestCubeSlopeYAtX(oldCube, newCube.center.x, slopeY) &&
+                std::abs(newBottom - slopeY) <= m_GroundSnapTolerance + 0.5f) {
+                continue;
+            }
         }
 
         const float oldLeft = oldCube.center.x - oldCube.size.x * 0.5f;
@@ -1304,6 +1371,9 @@ void App::ResolveCubeHorizontalCollisions(
                 }
 
                 const auto& other = m_SolidBlocks[j];
+                if (other.isSlopeGuard) {
+                    continue;
+                }
                 if (!cubeCollides(candidate, other)) {
                     continue;
                 }
@@ -1351,6 +1421,9 @@ void App::ResolveCubeHorizontalCollisions(
                 }
 
                 const auto& other = m_SolidBlocks[j];
+                if (other.isSlopeGuard) {
+                    continue;
+                }
                 if (!cubeCollides(candidate, other)) {
                     continue;
                 }
@@ -1402,8 +1475,10 @@ bool App::ResolveCubeSlopeGrounding(
     const float leftFootX = newCube.center.x - newCube.size.x * 0.5f + footInset;
     const float rightFootX = newCube.center.x + newCube.size.x * 0.5f - footInset;
 
-    bool foundSlope = false;
-    float bestGroundY = -std::numeric_limits<float>::infinity();
+    bool foundExactSlope = false;
+    float bestExactGroundY = -std::numeric_limits<float>::infinity();
+    bool foundTransitionSlope = false;
+    float bestTransitionGroundY = -std::numeric_limits<float>::infinity();
 
     for (const auto& slope : m_Slopes) {
         const glm::vec2 delta = slope.end - slope.start;
@@ -1412,9 +1487,10 @@ bool App::ResolveCubeSlopeGrounding(
         }
 
         for (const float footX : {leftFootX, newCube.center.x, rightFootX}) {
-            const float minX = std::min(slope.start.x, slope.end.x) - m_SlopeSnapTolerance;
-            const float maxX = std::max(slope.start.x, slope.end.x) + m_SlopeSnapTolerance;
-            if (footX < minX || footX > maxX) {
+            const float actualMinX = std::min(slope.start.x, slope.end.x);
+            const float actualMaxX = std::max(slope.start.x, slope.end.x);
+            if (footX < actualMinX - m_SlopeSnapTolerance ||
+                footX > actualMaxX + m_SlopeSnapTolerance) {
                 continue;
             }
 
@@ -1423,7 +1499,10 @@ bool App::ResolveCubeSlopeGrounding(
                 continue;
             }
 
-            const float slopeY = slope.start.y + delta.y * t;
+            const bool withinActualSpan =
+                footX >= actualMinX && footX <= actualMaxX && t >= 0.0f && t <= 1.0f;
+            const float sampledT = withinActualSpan ? t : std::clamp(t, 0.0f, 1.0f);
+            const float slopeY = slope.start.y + delta.y * sampledT;
             const bool crossesSlope =
                 oldBottom >= slopeY - m_SlopeSnapTolerance &&
                 newBottom <= slopeY + m_SlopeSnapTolerance;
@@ -1432,18 +1511,25 @@ bool App::ResolveCubeSlopeGrounding(
                 continue;
             }
 
-            if (!foundSlope || slopeY > bestGroundY) {
-                bestGroundY = slopeY;
-                foundSlope = true;
+            if (withinActualSpan) {
+                if (!foundExactSlope || slopeY > bestExactGroundY) {
+                    bestExactGroundY = slopeY;
+                    foundExactSlope = true;
+                }
+            }
+            else if (!foundTransitionSlope || slopeY > bestTransitionGroundY) {
+                bestTransitionGroundY = slopeY;
+                foundTransitionSlope = true;
             }
         }
     }
 
-    if (!foundSlope) {
+    if (!foundExactSlope && !foundTransitionSlope) {
         return false;
     }
 
-    newCube.center.y = bestGroundY + newCube.size.y * 0.5f;
+    const float groundY = foundExactSlope ? bestExactGroundY : bestTransitionGroundY;
+    newCube.center.y = groundY + newCube.size.y * 0.5f;
     velocity.y = 0.0f;
     onGround = true;
     return true;
@@ -1459,8 +1545,12 @@ bool App::FindBestCubeSlopeYAtX(
     const float leftFootX = desiredCenterX - oldCube.size.x * 0.5f + footInset;
     const float rightFootX = desiredCenterX + oldCube.size.x * 0.5f - footInset;
 
-    bool foundSlope = false;
-    float bestSlopeY = -std::numeric_limits<float>::infinity();
+    bool foundExactSlope = false;
+    float bestExactSlopeY = 0.0f;
+    float bestExactDistance = std::numeric_limits<float>::infinity();
+    bool foundTransitionSlope = false;
+    float bestTransitionSlopeY = 0.0f;
+    float bestTransitionDistance = std::numeric_limits<float>::infinity();
 
     for (const auto& slope : m_Slopes) {
         const glm::vec2 delta = slope.end - slope.start;
@@ -1469,9 +1559,10 @@ bool App::FindBestCubeSlopeYAtX(
         }
 
         for (const float footX : {leftFootX, desiredCenterX, rightFootX}) {
-            const float minX = std::min(slope.start.x, slope.end.x) - m_SlopeTopTransitionWidth;
-            const float maxX = std::max(slope.start.x, slope.end.x) + m_SlopeTopTransitionWidth;
-            if (footX < minX || footX > maxX) {
+            const float actualMinX = std::min(slope.start.x, slope.end.x);
+            const float actualMaxX = std::max(slope.start.x, slope.end.x);
+            if (footX < actualMinX - m_SlopeTopTransitionWidth ||
+                footX > actualMaxX + m_SlopeTopTransitionWidth) {
                 continue;
             }
 
@@ -1480,25 +1571,47 @@ bool App::FindBestCubeSlopeYAtX(
                 continue;
             }
 
-            const float slopeY = slope.start.y + delta.y * t;
+            const bool withinActualSpan =
+                footX >= actualMinX && footX <= actualMaxX && t >= 0.0f && t <= 1.0f;
+            const float sampledT = withinActualSpan ? t : std::clamp(t, 0.0f, 1.0f);
+            const float slopeY = slope.start.y + delta.y * sampledT;
             const float deltaFromFeet = slopeY - oldBottom;
             if (deltaFromFeet < -m_SlopeFollowTolerance ||
                 deltaFromFeet > m_SlopeTopTransitionHeight) {
                 continue;
             }
 
-            if (!foundSlope || slopeY > bestSlopeY) {
-                bestSlopeY = slopeY;
-                foundSlope = true;
+            const float distance = std::abs(deltaFromFeet);
+            if (withinActualSpan) {
+                if (!foundExactSlope ||
+                    distance < bestExactDistance - 0.01f ||
+                    (std::abs(distance - bestExactDistance) <= 0.01f &&
+                     slopeY > bestExactSlopeY)) {
+                    bestExactSlopeY = slopeY;
+                    bestExactDistance = distance;
+                    foundExactSlope = true;
+                }
+            }
+            else if (!foundTransitionSlope ||
+                     distance < bestTransitionDistance - 0.01f ||
+                     (std::abs(distance - bestTransitionDistance) <= 0.01f &&
+                      slopeY > bestTransitionSlopeY)) {
+                bestTransitionSlopeY = slopeY;
+                bestTransitionDistance = distance;
+                foundTransitionSlope = true;
             }
         }
     }
 
-    if (!foundSlope) {
+    if (foundExactSlope) {
+        outSlopeY = bestExactSlopeY;
+        return true;
+    }
+    if (!foundTransitionSlope) {
         return false;
     }
 
-    outSlopeY = bestSlopeY;
+    outSlopeY = bestTransitionSlopeY;
     return true;
 }
 
@@ -1532,6 +1645,9 @@ bool App::FindNearbyCubeGroundY(
         }
 
         const auto& block = m_SolidBlocks[i];
+        if (block.isSlopeGuard || block.isSlopeFill) {
+            continue;
+        }
         const float blockLeft = block.center.x - block.size.x * 0.5f;
         const float blockRight = block.center.x + block.size.x * 0.5f;
         if (right <= blockLeft - m_FootProbeInset || left >= blockRight + m_FootProbeInset) {

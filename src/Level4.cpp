@@ -86,17 +86,23 @@ void App::BuildLevel4() {
     m_SolidBlocks.push_back(ImageRectToWorldRect(890.0f, 446.0f, 966.0f, 483.0f));
     m_SolidBlocks.push_back(ImageRectToWorldRect(1000.0f, 749.0f, 1300.0f, 783.0f));
     m_SolidBlocks.push_back(ImageRectToWorldRect(1112.0f, 744.0f, 1149.0f, 749.0f));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(1121.0f, 739.0f, 1130.0f, 744.0f, false));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(1130.0f, 731.0f, 1139.0f, 744.0f, false));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(1139.0f, 724.0f, 1147.0f, 744.0f, false));
+    auto addSlopeFillRect = [this](float left, float top, float right, float bottom) {
+        SolidRect fill = ImageRectToWorldRect(left, top, right, bottom, false);
+        fill.isSlopeFill = true;
+        m_SolidBlocks.push_back(fill);
+    };
+    addSlopeFillRect(1121.0f, 739.0f, 1130.0f, 744.0f);
+    addSlopeFillRect(1130.0f, 731.0f, 1139.0f, 744.0f);
+    addSlopeFillRect(1139.0f, 724.0f, 1147.0f, 744.0f);
+    // Keep this narrow endpoint as a real vertical wall, not slope fill.
     m_SolidBlocks.push_back(ImageRectToWorldRect(1147.0f, 717.0f, 1149.0f, 744.0f, false));
 
     // Floating platforms inside the playable contour.
     m_SolidBlocks.push_back(ImageRectToWorldRect(109.0f, 146.0f, 248.0f, 179.0f));
     m_SolidBlocks.push_back(ImageRectToWorldRect(295.0f, 181.0f, 446.0f, 215.0f));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(446.0f, 193.0f, 454.0f, 215.0f, false));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(454.0f, 203.0f, 462.0f, 215.0f, false));
-    m_SolidBlocks.push_back(ImageRectToWorldRect(462.0f, 213.0f, 471.0f, 215.0f, false));
+    addSlopeFillRect(446.0f, 193.0f, 454.0f, 215.0f);
+    addSlopeFillRect(454.0f, 203.0f, 462.0f, 215.0f);
+    addSlopeFillRect(462.0f, 213.0f, 471.0f, 215.0f);
     m_SolidBlocks.push_back(ImageRectToWorldRect(745.0f, 559.0f, 850.0f, 595.0f));
     m_SolidBlocks.push_back(ImageRectToWorldRect(518.0f, 937.0f, 624.0f, 973.0f));
     m_SolidBlocks.push_back(ImageRectToWorldRect(781.0f, 900.0f, 927.0f, 937.0f));
@@ -146,20 +152,29 @@ void App::BuildLevel4() {
     auto addHorizontalChainLinks = [&](float leftXImage, float rightXImage, float centerYImage) {
         constexpr float chainLinkScale = 0.064f;
         const glm::vec2 chainLinkSize = ImageSizeToWorldSize(124.0f, 1024.0f, chainLinkScale);
-        const float chainLinkLengthImage = 1024.0f * chainLinkScale;
-        const float halfChainLinkLengthImage = chainLinkLengthImage * 0.5f;
-        const float stepXImage = 46.0f;
-        const float firstCenterXImage = leftXImage + halfChainLinkLengthImage;
-        const float lastCenterXImage = rightXImage - halfChainLinkLengthImage;
-        float previousCenterXImage = firstCenterXImage - stepXImage;
+        const float leftX = ImagePointToWorldPoint(leftXImage, centerYImage).x;
+        const float rightX = ImagePointToWorldPoint(rightXImage, centerYImage).x;
+        const float chainWidth = std::max(1.0f, rightX - leftX);
+        const float desiredSpacing = ImageSizeToWorldSize(44.0f, 0.0f).x;
+        const int linkCount = std::max(
+            3,
+            static_cast<int>(std::ceil(chainWidth / std::max(1.0f, desiredSpacing)))
+        );
 
-        auto addHorizontalChainLink = [&](float centerXImage) {
+        m_Level4HorizontalChainMinX = leftX;
+        m_Level4HorizontalChainWidth = chainWidth;
+        m_Level4HorizontalChainSpacing = chainWidth / static_cast<float>(linkCount);
+
+        auto addHorizontalChainLink = [&](float centerX) {
             auto link = std::make_shared<Character>(
                 GA_RESOURCE_DIR "/Image/Assets/chain2.png"
             );
             link->SetZIndex(8.12f);
             link->SetSize(chainLinkSize);
-            const glm::vec2 linkPosition = ImagePointToWorldPoint(centerXImage, centerYImage);
+            const glm::vec2 linkPosition = {
+                centerX,
+                ImagePointToWorldPoint(0.0f, centerYImage).y,
+            };
             link->SetPosition(linkPosition);
             link->m_Transform.rotation = 1.57079632679f;
             m_Root.AddChild(link);
@@ -168,15 +183,10 @@ void App::BuildLevel4() {
             m_Level4HorizontalChainBasePositions.push_back(linkPosition);
         };
 
-        for (float centerXImage = firstCenterXImage;
-             centerXImage <= lastCenterXImage;
-             centerXImage += stepXImage) {
-            addHorizontalChainLink(centerXImage);
-            previousCenterXImage = centerXImage;
-        }
-
-        if (lastCenterXImage - previousCenterXImage > stepXImage * 0.4f) {
-            addHorizontalChainLink(lastCenterXImage);
+        for (int i = 0; i < linkCount; ++i) {
+            addHorizontalChainLink(
+                leftX + (static_cast<float>(i) + 0.5f) * m_Level4HorizontalChainSpacing
+            );
         }
     };
 
@@ -196,6 +206,7 @@ void App::BuildLevel4() {
         point->SetPosition(ImagePointToWorldPoint(centerXImage, centerYImage));
         m_Root.AddChild(point);
         m_LevelProps.push_back(point);
+        m_Level4ChainPulleys.push_back(point);
     };
     addChainPoint(leftChainPlatformCenterXImage + chainPointInsetXImage, 33.0f + chainPointDropYImage);
     addChainPoint(upperChainCenterXImage - chainPointInsetXImage, 33.0f + chainPointDropYImage);
@@ -236,6 +247,8 @@ void App::BuildLevel4() {
     m_Root.AddChild(chainConnector);
     m_LevelProps.push_back(chainConnector);
     m_Level4ChainConnectBottom = chainConnector;
+    m_Level4ChainBottomConnectorYOffset =
+        chainConnector->GetPosition().y - m_Level4ChainPlatformBottomRestRect.center.y;
 
     auto leftChainPlatform = std::make_shared<Character>(
         GA_RESOURCE_DIR "/Image/Assets/platform_wood.png"
@@ -247,7 +260,7 @@ void App::BuildLevel4() {
     m_LevelProps.push_back(leftChainPlatform);
     m_Level4ChainPlatformBottom = leftChainPlatform;
 
-    constexpr float upperChainPlatformDropImage = 24.0f;
+    constexpr float upperChainPlatformDropImage = 44.0f;
     const glm::vec2 upperChainPlatformSize = chainPlatformSize;
     const SolidRect upperChainPlatformRect = ImageRectToWorldRect(
         upperChainPlatformCenterXImage - chainPlatformWidthImage * 0.5f,
@@ -265,6 +278,7 @@ void App::BuildLevel4() {
         735.0f - (150.0f + upperChainPlatformDropImage + chainPlatformHeightImage)
     ).y;
     m_Level4ChainPlatformSpeed = 1.4f;
+    m_Level4ChainPlatformAcceleration = 0.075f;
     m_Level4ChainPlatformBottomTravelScale = 1.0f;
     m_SolidBlocks.push_back(upperChainPlatformRect);
 
@@ -302,6 +316,8 @@ void App::BuildLevel4() {
     m_Root.AddChild(upperChainConnector);
     m_LevelProps.push_back(upperChainConnector);
     m_Level4ChainConnectTop = upperChainConnector;
+    m_Level4ChainTopConnectorYOffset =
+        upperChainConnector->GetPosition().y - m_Level4ChainPlatformTopRestRect.center.y;
 
     auto upperChainPlatform = std::make_shared<Character>(
         GA_RESOURCE_DIR "/Image/Assets/platform_wood.png"
@@ -390,6 +406,15 @@ void App::BuildLevel4() {
     m_GreenPlatform2->SetPosition(m_GreenPlatformCurrentRect2.center);
     m_GreenPlatform2->m_Transform.rotation = 1.57079632679f;
     m_Root.AddChild(m_GreenPlatform2);
+
+    auto venomPlatformCover = std::make_shared<Character>(
+        GA_RESOURCE_DIR "/Image/Assets/level4_venom_platform_cover.png"
+    );
+    venomPlatformCover->SetZIndex(9.4f);
+    venomPlatformCover->SetSize(ImageSizeToWorldSize(140.0f, 231.0f));
+    venomPlatformCover->SetPosition(ImagePointToWorldPoint(430.0f, 965.5f));
+    m_Root.AddChild(venomPlatformCover);
+    m_LevelProps.push_back(venomPlatformCover);
 
     m_GreenButtonAfterHitbox = ImageRectToWorldRect(1216.0f, 500.0f, 1288.0f, 521.0f);
     m_GreenButtonAfter = std::make_shared<Character>(

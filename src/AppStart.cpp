@@ -98,6 +98,7 @@ void App::Start() {
     m_Level4ChainConnectBottom.reset();
     m_Level4HorizontalChainLinks.clear();
     m_Level4HorizontalChainBasePositions.clear();
+    m_Level4ChainPulleys.clear();
     m_Level2TopButtonLeft.reset();
     m_Level2TopButtonRight.reset();
     m_Cube.reset();
@@ -152,6 +153,23 @@ void App::Start() {
     m_VictoryRankText.reset();
     m_VictoryContinueButton = {};
     m_VictoryOverlayObjects.clear();
+    m_PauseOverlayObjects.clear();
+    m_TimerHudPanel.reset();
+    m_TimerHudText.reset();
+    m_PauseDimmer.reset();
+    m_PauseOverlayPanel.reset();
+    m_PauseOverlayTitle.reset();
+    m_PauseBlueDiamondIcon.reset();
+    m_PauseRedDiamondIcon.reset();
+    m_PauseBlueDiamondText.reset();
+    m_PauseRedDiamondText.reset();
+    m_PauseMainMenuButton = {};
+    m_PauseRetryButton = {};
+    m_PauseResumeButton = {};
+    m_GamePaused = false;
+    m_PauseMouseLatch = false;
+    m_PauseStartedTimeMs = 0.0f;
+    m_VolumeControlIcon.reset();
     m_LevelStartTimeMs = 0.0f;
     m_LevelCompleteTimeMs = 0.0f;
     m_GreenButtonAfterBaseSize = {0.0f, 0.0f};
@@ -184,12 +202,19 @@ void App::Start() {
     m_Level2HangingPlatformAngle = 0.0f;
     m_Level2HangingPlatformAngle2 = 0.0f;
     m_Level4ChainPlatformOffset = 0.0f;
+    m_Level4ChainPlatformVelocity = 0.0f;
     m_Level4ChainPlatformBottomTravelScale = 1.0f;
     m_Level4ChainTopXOffset = 0.0f;
     m_Level4ChainBottomXOffset = 0.0f;
     m_Level4ChainTopAnchorY = 0.0f;
     m_Level4ChainBottomAnchorY = 0.0f;
+    m_Level4ChainTopConnectorYOffset = 0.0f;
+    m_Level4ChainBottomConnectorYOffset = 0.0f;
+    m_Level4HorizontalChainMinX = 0.0f;
+    m_Level4HorizontalChainWidth = 0.0f;
+    m_Level4HorizontalChainSpacing = 0.0f;
     m_Level4HorizontalChainAnimPhase = 0.0f;
+    m_Level4ChainPulleyRotation = 0.0f;
 
     if (!m_GameplayMusic) {
         m_GameplayMusic = std::make_unique<Util::BGM>(
@@ -749,6 +774,12 @@ void App::Start() {
         51.0f
     );
 
+    BuildGameplayUi();
+    BuildVolumeControl();
+    if (std::getenv("GA_SLOPE_REGRESSION_AUDIT") != nullptr) {
+        const bool passed = RunSlopeTopTransitionRegressionAudit();
+        std::exit(passed ? 0 : 2);
+    }
     UpdateVictoryOverlayVisuals();
     // Rebuild the switch latch from the new scene so restart does not inherit
     // an accidental pressed/not-pressed edge from the previous run.
@@ -756,6 +787,7 @@ void App::Start() {
     m_LevelStartTimeMs = Util::Time::GetElapsedTimeMs();
     if (m_GameplayMusic) {
         m_GameplayMusic->Play(-1);
+        ApplyVolumeState();
     }
 
     m_CurrentState = State::UPDATE;

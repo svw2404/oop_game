@@ -1,16 +1,13 @@
 #include "App.hpp"
 
+#include "Util/Logger.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
 namespace {
-constexpr std::size_t kNoIgnoredBlock = static_cast<std::size_t>(-1);
 constexpr float DESCENDING_PLATFORM_HEAD_CLEARANCE_LOCAL = 2.0f;
-constexpr float HANGING_PLATFORM_SLIDE_ACCELERATION = 0.24f;
-constexpr float HANGING_PLATFORM_MAX_SLIDE_SPEED = 4.0f;
-constexpr float HANGING_PLATFORM_SLIDE_POSITION_NUDGE = 0.45f;
-constexpr float HANGING_PLATFORM_MIN_SLIDE_ANGLE = 0.035f;
 
 float MoveToward(float current, float target, float maxDelta) {
     if (current < target) {
@@ -257,7 +254,8 @@ bool App::WouldCharacterHitTerrainAt(
 void App::ResolveHorizontalCollisions(
     const glm::vec2& oldPos,
     glm::vec2& newPos,
-    const CharacterCollisionProfile& profile
+    const CharacterCollisionProfile& profile,
+    bool onGround
 ) {
     const float oldLeft = GetCharacterLeftEdge(oldPos, profile);
     const float oldRight = GetCharacterRightEdge(oldPos, profile);
@@ -268,15 +266,35 @@ void App::ResolveHorizontalCollisions(
     const float bodyBottomOffset = oldPos.y - oldBottom;
     float currentGroundY = 0.0f;
     const bool nearGroundForStepAssist =
+        onGround &&
         FindNearbyGroundY(oldPos, m_GroundStickTolerance + m_GroundSnapTolerance, currentGroundY, profile) &&
         oldBottom >= currentGroundY - m_GroundSnapTolerance &&
         oldBottom <= currentGroundY + m_GroundStickTolerance;
+    auto followsFloorSlope = [&]() {
+        float slopeY = 0.0f;
+        if (!FindBestSlopeYAtX(oldPos, newPos.x, slopeY, profile)) {
+            return false;
+        }
+
+        glm::vec2 newBodyCenter;
+        glm::vec2 newBodySize;
+        GetCharacterBodyBox(newPos, profile, newBodyCenter, newBodySize);
+        const float newBottom = newBodyCenter.y - newBodySize.y * 0.5f;
+        return std::abs(newBottom - slopeY) <= m_GroundSnapTolerance + 0.5f;
+    };
 
     for (const auto& block : m_SolidBlocks) {
         if (block.isSlopeGuard) {
             continue;
         }
         if (!CheckCharacterCollision(newPos, block, profile)) {
+            continue;
+        }
+        if (onGround &&
+            TryStepFromSlopeHighEnd(oldPos, newPos, block, profile)) {
+            continue;
+        }
+        if (block.isSlopeFill && nearGroundForStepAssist && followsFloorSlope()) {
             continue;
         }
 
@@ -429,6 +447,245 @@ void App::ResolveHorizontalCollisions(
             }
         }
     }
+}
+
+bool App::TryStepFromSlopeHighEnd(
+    const glm::vec2& oldPos,
+    glm::vec2& newPos,
+    const SolidRect& blockingBlock,
+    const CharacterCollisionProfile& profile
+) const {
+    if (blockingBlock.isSlopeGuard || blockingBlock.isSlopeFill) {
+        return false;
+    }
+
+    const float requestedDeltaX = newPos.x - oldPos.x;
+    if (std::abs(requestedDeltaX) < 0.001f) {
+        return false;
+    }
+
+    glm::vec2 oldBodyCenter;
+    glm::vec2 oldBodySize;
+    GetCharacterBodyBox(oldPos, profile, oldBodyCenter, oldBodySize);
+    const float oldBottom = oldBodyCenter.y - oldBodySize.y * 0.5f;
+    const float bodyBottomOffset = oldPos.y - oldBottom;
+
+    const bool movingRight = requestedDeltaX > 0.0f;
+    const float oldLeadingEdge = movingRight
+        ? GetCharacterRightEdge(oldPos, profile)
+        : GetCharacterLeftEdge(oldPos, profile);
+    const float blockSide = movingRight
+        ? blockingBlock.center.x - blockingBlock.size.x * 0.5f
+        : blockingBlock.center.x + blockingBlock.size.x * 0.5f;
+    const float blockTop =
+        blockingBlock.center.y + blockingBlock.size.y * 0.5f;
+
+    if (std::abs(oldLeadingEdge - blockSide) >
+        m_SlopeTopTransitionWidth + m_GroundSnapTolerance) {
+        return false;
+    }
+
+    for (const auto& slope : m_Slopes) {
+        const glm::vec2 highPoint =
+            slope.start.y >= slope.end.y ? slope.start : slope.end;
+        const glm::vec2 lowPoint =
+            slope.start.y >= slope.end.y ? slope.end : slope.start;
+        const float uphillDirection = highPoint.x > lowPoint.x ? 1.0f : -1.0f;
+
+        if (requestedDeltaX * uphillDirection <= 0.0f) {
+            continue;
+        }
+        if (std::abs(highPoint.x - blockSide) > m_SlopeTopTransitionWidth) {
+            continue;
+        }
+        if (std::abs(oldLeadingEdge - highPoint.x) >
+            m_SlopeTopTransitionWidth + m_GroundSnapTolerance) {
+            continue;
+        }
+
+        const float distanceBelowHighPoint = highPoint.y - oldBottom;
+        if (distanceBelowHighPoint < -m_GroundSnapTolerance ||
+            distanceBelowHighPoint >
+                m_SlopeTopTransitionHeight + m_GroundSnapTolerance) {
+            continue;
+        }
+
+        const float blockContinuationHeight = blockTop - highPoint.y;
+        if (blockContinuationHeight < -m_GroundSnapTolerance ||
+            blockContinuationHeight >
+                m_StepUpHeight + m_GroundSnapTolerance) {
+            continue;
+        }
+
+        const float liftAmount = blockTop - oldBottom;
+        if (liftAmount < -m_GroundSnapTolerance ||
+            liftAmount > m_StepUpHeight + m_GroundSnapTolerance) {
+            continue;
+        }
+
+        const glm::vec2 candidatePos = {
+            newPos.x,
+            blockTop + bodyBottomOffset + 0.1f,
+        };
+        glm::vec2 candidateBodyCenter;
+        glm::vec2 candidateBodySize;
+        glm::vec2 candidateHeadCenter;
+        glm::vec2 candidateHeadSize;
+        GetCharacterBodyBox(
+            candidatePos,
+            profile,
+            candidateBodyCenter,
+            candidateBodySize
+        );
+        GetCharacterHeadBox(
+            candidatePos,
+            profile,
+            candidateHeadCenter,
+            candidateHeadSize
+        );
+        const float candidateBottom =
+            candidateBodyCenter.y - candidateBodySize.y * 0.5f;
+
+        bool blocked = false;
+        for (const auto& other : m_SolidBlocks) {
+            if (&other == &blockingBlock || other.isSlopeGuard) {
+                continue;
+            }
+
+            const bool bodyOverlap = CheckAABB(
+                candidateBodyCenter,
+                candidateBodySize,
+                other.center,
+                other.size
+            );
+            const bool headOverlap = CheckAABB(
+                candidateHeadCenter,
+                candidateHeadSize,
+                other.center,
+                other.size
+            );
+            if (!bodyOverlap && !headOverlap) {
+                continue;
+            }
+
+            const float otherTop = other.center.y + other.size.y * 0.5f;
+            const bool embeddedSupportMass =
+                (!other.blockBottom || other.isSlopeFill) &&
+                candidateBottom > otherTop + m_GroundSnapTolerance;
+            const bool supportContact =
+                candidateBottom >= otherTop - m_GroundSnapTolerance &&
+                candidateBottom <= otherTop + m_SlopeSnapTolerance;
+            if (!embeddedSupportMass && !supportContact) {
+                blocked = true;
+                break;
+            }
+        }
+
+        if (!blocked) {
+            newPos.y = candidatePos.y;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool App::RunSlopeTopTransitionRegressionAudit() const {
+    int candidateCount = 0;
+    int failureCount = 0;
+
+    for (const auto& slope : m_Slopes) {
+        const glm::vec2 highPoint =
+            slope.start.y >= slope.end.y ? slope.start : slope.end;
+        const glm::vec2 lowPoint =
+            slope.start.y >= slope.end.y ? slope.end : slope.start;
+        const float uphillDirection = highPoint.x > lowPoint.x ? 1.0f : -1.0f;
+
+        for (const auto& block : m_SolidBlocks) {
+            if (block.isSlopeGuard || block.isSlopeFill) {
+                continue;
+            }
+
+            const float blockSide = uphillDirection > 0.0f
+                ? block.center.x - block.size.x * 0.5f
+                : block.center.x + block.size.x * 0.5f;
+            const float blockTop =
+                block.center.y + block.size.y * 0.5f;
+            const float continuationHeight = blockTop - highPoint.y;
+            if (std::abs(blockSide - highPoint.x) > m_SlopeTopTransitionWidth ||
+                continuationHeight < -m_GroundSnapTolerance ||
+                continuationHeight >
+                    m_StepUpHeight + m_GroundSnapTolerance) {
+                continue;
+            }
+
+            for (const CharacterCollisionProfile* profile : {
+                     &m_FireboyCollision,
+                     &m_WatergirlCollision,
+                 }) {
+                glm::vec2 originBodyCenter;
+                glm::vec2 originBodySize;
+                GetCharacterBodyBox(
+                    {0.0f, 0.0f},
+                    *profile,
+                    originBodyCenter,
+                    originBodySize
+                );
+                const float originBottom =
+                    originBodyCenter.y - originBodySize.y * 0.5f;
+                const float bottomOffset = -originBottom;
+                const float edgeOffset = uphillDirection > 0.0f
+                    ? GetCharacterRightEdge({0.0f, 0.0f}, *profile)
+                    : GetCharacterLeftEdge({0.0f, 0.0f}, *profile);
+
+                glm::vec2 oldPos = {
+                    blockSide - edgeOffset,
+                    highPoint.y + bottomOffset,
+                };
+                glm::vec2 newPos = oldPos + glm::vec2{
+                    uphillDirection * 0.2f,
+                    0.0f,
+                };
+                const float requestedX = newPos.x;
+
+                const_cast<App*>(this)->ResolveHorizontalCollisions(
+                    oldPos,
+                    newPos,
+                    *profile,
+                    true
+                );
+                ++candidateCount;
+
+                const float resolvedBottom =
+                    GetCharacterBodyBottom(newPos, *profile);
+                const bool keptProgress =
+                    std::abs(newPos.x - requestedX) <= 0.001f;
+                const bool reachedTop =
+                    std::abs(resolvedBottom - blockTop) <=
+                    m_GroundSnapTolerance;
+                if (!keptProgress || !reachedTop) {
+                    ++failureCount;
+                    LOG_ERROR(
+                        "[SLOPE AUDIT] failed high=({}, {}) side={} top={} resolved=({}, {})",
+                        highPoint.x,
+                        highPoint.y,
+                        blockSide,
+                        blockTop,
+                        newPos.x,
+                        resolvedBottom
+                    );
+                }
+            }
+        }
+    }
+
+    LOG_INFO(
+        "[SLOPE AUDIT] level {} candidates={} failures={}",
+        m_ActiveLevelIndex,
+        candidateCount,
+        failureCount
+    );
+    return candidateCount > 0 && failureCount == 0;
 }
 
 void App::ResolveVerticalCollisions(
@@ -707,7 +964,7 @@ bool App::TrySnapToSlopeTopTransition(
     glm::vec2 bodyCenter;
     glm::vec2 bodySize;
     GetCharacterBodyBox(newPos, profile, bodyCenter, bodySize);
-    newPos.y = groundY + (newPos.y - (bodyCenter.y - bodySize.y * 0.5f));
+    newPos.y = groundY + (newPos.y - (bodyCenter.y - bodySize.y * 0.5f)) + 0.1f;
 
     return !CheckCharacterCollision(newPos, blockingBlock, profile);
 }
@@ -1053,36 +1310,103 @@ void App::CarryCharacterWithPlatform(
     }
 }
 
-float App::ClampDescendingPlatformDeltaAgainstCharacter(
+float App::ClampPlatformDeltaAgainstCharacter(
     const std::shared_ptr<HeadBodyCharacter>& character,
     const CharacterCollisionProfile& profile,
     const SolidRect& oldPlatform,
     float requestedDeltaY,
     std::size_t platformBlockIndex
 ) const {
-    if (!character || !character->IsAlive() || requestedDeltaY >= 0.0f) {
+    if (!character || !character->IsAlive() || std::abs(requestedDeltaY) <= 0.001f) {
         return requestedDeltaY;
     }
 
+    glm::vec2 bodyCenter;
+    glm::vec2 bodySize;
     glm::vec2 headCenter;
     glm::vec2 headSize;
+    GetCharacterBodyBox(character->GetPosition(), profile, bodyCenter, bodySize);
     GetCharacterHeadBox(character->GetPosition(), profile, headCenter, headSize);
+    const float bodyBottom = bodyCenter.y - bodySize.y * 0.5f;
     const float headTop = headCenter.y + headSize.y * 0.5f;
+    const float platformTop = oldPlatform.center.y + oldPlatform.size.y * 0.5f;
     const float platformBottom = oldPlatform.center.y - oldPlatform.size.y * 0.5f;
     const bool horizontalOverlap =
-        headCenter.x + headSize.x * 0.5f > oldPlatform.center.x - oldPlatform.size.x * 0.5f &&
-        headCenter.x - headSize.x * 0.5f < oldPlatform.center.x + oldPlatform.size.x * 0.5f;
+        std::max(
+            bodyCenter.x + bodySize.x * 0.5f,
+            headCenter.x + headSize.x * 0.5f
+        ) > oldPlatform.center.x - oldPlatform.size.x * 0.5f &&
+        std::min(
+            bodyCenter.x - bodySize.x * 0.5f,
+            headCenter.x - headSize.x * 0.5f
+        ) < oldPlatform.center.x + oldPlatform.size.x * 0.5f;
 
-    if (!horizontalOverlap || headTop > platformBottom) {
+    if (!horizontalOverlap) {
         return requestedDeltaY;
     }
 
-    const float allowedDelta = headTop + DESCENDING_PLATFORM_HEAD_CLEARANCE_LOCAL - platformBottom;
-    if (allowedDelta > requestedDeltaY) {
-        return allowedDelta;
+    const bool stoodOnPlatform =
+        bodyBottom >= platformTop - m_GroundSnapTolerance &&
+        bodyBottom <= platformTop + m_GroundStickTolerance;
+
+    if (requestedDeltaY < 0.0f) {
+        if (stoodOnPlatform) {
+            return requestedDeltaY;
+        }
+        if (headTop > platformBottom) {
+            return CheckCharacterCollision(character->GetPosition(), oldPlatform, profile)
+                ? 0.0f
+                : requestedDeltaY;
+        }
+
+        const float allowedDelta =
+            headTop + DESCENDING_PLATFORM_HEAD_CLEARANCE_LOCAL - platformBottom;
+        return std::max(requestedDeltaY, std::min(0.0f, allowedDelta));
     }
 
-    return requestedDeltaY + static_cast<float>(platformBlockIndex == kNoIgnoredBlock) * 0.0f;
+    if (stoodOnPlatform) {
+        const glm::vec2 startPos = character->GetPosition();
+        const glm::vec2 requestedPos = startPos + glm::vec2{0.0f, requestedDeltaY};
+        if (!WouldCharacterHitTerrainAt(
+                requestedPos,
+                profile,
+                true,
+                platformBlockIndex
+            )) {
+            return requestedDeltaY;
+        }
+
+        float safeDelta = 0.0f;
+        float blockedDelta = requestedDeltaY;
+        for (int i = 0; i < 8; ++i) {
+            const float candidateDelta = (safeDelta + blockedDelta) * 0.5f;
+            const glm::vec2 candidatePos =
+                startPos + glm::vec2{0.0f, candidateDelta};
+            if (WouldCharacterHitTerrainAt(
+                    candidatePos,
+                    profile,
+                    true,
+                    platformBlockIndex
+                )) {
+                blockedDelta = candidateDelta;
+            }
+            else {
+                safeDelta = candidateDelta;
+            }
+        }
+        return safeDelta;
+    }
+
+    if (CheckCharacterCollision(character->GetPosition(), oldPlatform, profile)) {
+        return 0.0f;
+    }
+    if (bodyBottom <= platformTop) {
+        return requestedDeltaY;
+    }
+
+    const float allowedDelta =
+        bodyBottom - DESCENDING_PLATFORM_HEAD_CLEARANCE_LOCAL - platformTop;
+    return std::min(requestedDeltaY, std::max(0.0f, allowedDelta));
 }
 
 void App::CarryCharacterWithCube(
@@ -1126,6 +1450,8 @@ void App::CarryCubeWithPlatform(const SolidRect& oldPlatform, float platformDelt
 
     if (stoodOnPlatform) {
         m_CubeRect.center.y += platformDeltaY;
+        m_CubeVelocity.y = 0.0f;
+        m_CubeOnGround = true;
         if (m_CubeBlockIndex < m_SolidBlocks.size()) {
             m_SolidBlocks[m_CubeBlockIndex] = m_CubeRect;
         }
@@ -1150,18 +1476,33 @@ void App::UpdateGreenPlatform() {
         ((m_ActiveLevelIndex == 4) ? level4ButtonPressed : m_GreenSwitchOn)
             ? m_GreenPlatformPressedRect
             : m_GreenPlatformRestRect;
-    m_GreenPlatformCurrentRect.center.y = MoveToward(
-        m_GreenPlatformCurrentRect.center.y,
+    const float requestedY = MoveToward(
+        oldPlatform.center.y,
         target.center.y,
         m_GreenPlatformSpeed
     );
+    float deltaY = requestedY - oldPlatform.center.y;
+    deltaY = ClampPlatformDeltaAgainstCharacter(
+        m_Fireboy,
+        m_FireboyCollision,
+        oldPlatform,
+        deltaY,
+        m_GreenPlatformBlockIndex
+    );
+    deltaY = ClampPlatformDeltaAgainstCharacter(
+        m_Watergirl,
+        m_WatergirlCollision,
+        oldPlatform,
+        deltaY,
+        m_GreenPlatformBlockIndex
+    );
+    m_GreenPlatformCurrentRect.center.y = oldPlatform.center.y + deltaY;
     m_GreenPlatformCurrentRect.center.x = MoveToward(
         m_GreenPlatformCurrentRect.center.x,
         target.center.x,
         m_GreenPlatformSpeed
     );
 
-    const float deltaY = m_GreenPlatformCurrentRect.center.y - oldPlatform.center.y;
     m_SolidBlocks[m_GreenPlatformBlockIndex] = m_GreenPlatformCurrentRect;
     if (m_GreenPlatform) {
         m_GreenPlatform->SetPosition(m_GreenPlatformCurrentRect.center);
@@ -1177,9 +1518,7 @@ void App::UpdateGreenPlatform2() {
         return;
     }
 
-    const bool useSimpleLevel2Animation = (m_ActiveLevelIndex == 2);
-    const float buttonAnimSpeed =
-        useSimpleLevel2Animation ? (m_GreenButtonAnimSpeed * 2.0f) : m_GreenButtonAnimSpeed;
+    const float buttonAnimSpeed = m_GreenButtonAnimSpeed;
 
     const bool leftPressed =
         CharacterPressesRectFromAbove(m_Fireboy, m_FireboyCollision, m_GreenButtonAfterHitbox) ||
@@ -1195,18 +1534,33 @@ void App::UpdateGreenPlatform2() {
     m_GreenButtonPressed = pressed;
     const SolidRect oldPlatform = m_GreenPlatformCurrentRect2;
     const SolidRect& target = pressed ? m_GreenPlatformPressedRect2 : m_GreenPlatformRestRect2;
-    m_GreenPlatformCurrentRect2.center.y = MoveToward(
-        m_GreenPlatformCurrentRect2.center.y,
+    const float requestedY = MoveToward(
+        oldPlatform.center.y,
         target.center.y,
         m_GreenPlatformSpeed
     );
+    float deltaY = requestedY - oldPlatform.center.y;
+    deltaY = ClampPlatformDeltaAgainstCharacter(
+        m_Fireboy,
+        m_FireboyCollision,
+        oldPlatform,
+        deltaY,
+        m_GreenPlatformBlockIndex2
+    );
+    deltaY = ClampPlatformDeltaAgainstCharacter(
+        m_Watergirl,
+        m_WatergirlCollision,
+        oldPlatform,
+        deltaY,
+        m_GreenPlatformBlockIndex2
+    );
+    m_GreenPlatformCurrentRect2.center.y = oldPlatform.center.y + deltaY;
     m_GreenPlatformCurrentRect2.center.x = MoveToward(
         m_GreenPlatformCurrentRect2.center.x,
         target.center.x,
         m_GreenPlatformSpeed
     );
 
-    const float deltaY = m_GreenPlatformCurrentRect2.center.y - oldPlatform.center.y;
     m_SolidBlocks[m_GreenPlatformBlockIndex2] = m_GreenPlatformCurrentRect2;
     if (m_GreenPlatform2) {
         m_GreenPlatform2->SetPosition(m_GreenPlatformCurrentRect2.center);
@@ -1224,13 +1578,6 @@ void App::UpdateGreenPlatform2() {
         );
 
         if (!button) {
-            return;
-        }
-
-        if (useSimpleLevel2Animation) {
-            button->SetVisible(true);
-            button->SetSize(baseSize);
-            button->SetPosition(basePosition + glm::vec2{0.0f, -pressVisual});
             return;
         }
 
@@ -1271,7 +1618,7 @@ void App::UpdateLevel2HiddenPlatform() {
         return;
     }
 
-    const float buttonAnimSpeed = m_GreenButtonAnimSpeed * 2.0f;
+    const float buttonAnimSpeed = m_GreenButtonAnimSpeed;
     const bool leftPressed =
         CharacterPressesRectFromAbove(m_Fireboy, m_FireboyCollision, m_Level2TopButtonLeftHitbox) ||
         CharacterPressesRectFromAbove(m_Watergirl, m_WatergirlCollision, m_Level2TopButtonLeftHitbox) ||
@@ -1469,7 +1816,7 @@ void App::UpdateLevel2HangingPlatform() {
             };
         }
 
-        auto slideCharacter = [&](
+        auto settleCharacterOnPlatform = [&](
             const std::shared_ptr<HeadBodyCharacter>& character,
             const CharacterCollisionProfile& profile,
             glm::vec2& velocity,
@@ -1481,34 +1828,27 @@ void App::UpdateLevel2HangingPlatform() {
                 return;
             }
 
-            const float angleMagnitude = std::abs(angle);
-            if (angleMagnitude < HANGING_PLATFORM_MIN_SLIDE_ANGLE) {
-                return;
-            }
-
-            const float downhillDirection = angle < 0.0f ? 1.0f : -1.0f;
-            const float slideStrength = std::clamp(
-                angleMagnitude / std::max(0.001f, m_Level2HangingPlatformMaxAngle),
-                0.0f,
-                1.0f
-            );
-            velocity.x = std::clamp(
-                velocity.x + downhillDirection * HANGING_PLATFORM_SLIDE_ACCELERATION * slideStrength,
-                -HANGING_PLATFORM_MAX_SLIDE_SPEED,
-                HANGING_PLATFORM_MAX_SLIDE_SPEED
-            );
             velocity.y = std::min(velocity.y, 0.0f);
             onGround = true;
 
             glm::vec2 pos = character->GetPosition();
-            pos.x += downhillDirection * HANGING_PLATFORM_SLIDE_POSITION_NUDGE * slideStrength;
             const float bottomOffset = pos.y - (bodyCenter.y - bodySize.y * 0.5f);
             pos.y = platformTopYAt(pos.x + profile.bodyHitboxOffset.x, angle) + bottomOffset;
             character->SetPosition(pos);
         };
 
-        slideCharacter(m_Fireboy, m_FireboyCollision, m_FireboyVelocity, m_FireboyOnGround);
-        slideCharacter(m_Watergirl, m_WatergirlCollision, m_WatergirlVelocity, m_WatergirlOnGround);
+        settleCharacterOnPlatform(
+            m_Fireboy,
+            m_FireboyCollision,
+            m_FireboyVelocity,
+            m_FireboyOnGround
+        );
+        settleCharacterOnPlatform(
+            m_Watergirl,
+            m_WatergirlCollision,
+            m_WatergirlVelocity,
+            m_WatergirlOnGround
+        );
     };
 
     updateHangingPlatform(
@@ -1553,41 +1893,41 @@ void App::UpdateLevel4ChainPlatforms() {
         m_HasLevel4ChainPlatformBottom &&
         cubeStandsOn(m_Level4ChainPlatformBottomCurrentRect);
 
-    float targetOffset = 0.0f;
-    if (m_HasLevel4ChainPlatformTop && m_HasLevel4ChainPlatformBottom && topLoaded != bottomLoaded) {
-        targetOffset = topLoaded
-            ? -m_Level4ChainPlatformMaxOffset
-            : m_Level4ChainPlatformMaxOffset;
-    }
-    else if (m_HasLevel4ChainPlatformTop && !m_HasLevel4ChainPlatformBottom && topLoaded) {
-        targetOffset = -m_Level4ChainPlatformMaxOffset;
-    }
-    else if (!m_HasLevel4ChainPlatformTop && m_HasLevel4ChainPlatformBottom && bottomLoaded) {
-        targetOffset = m_Level4ChainPlatformMaxOffset;
-    }
+    // The mechanism has one valid travel range: the upper platform descends
+    // while the lower counter-platform rises. Loading the lower platform
+    // returns the mechanism toward rest instead of driving both platforms
+    // beyond the authored shafts.
+    const float targetOffset =
+        topLoaded && !bottomLoaded ? -m_Level4ChainPlatformMaxOffset : 0.0f;
 
     const float oldOffset = m_Level4ChainPlatformOffset;
-    m_Level4ChainPlatformOffset = MoveToward(
-        m_Level4ChainPlatformOffset,
-        targetOffset,
+    const float distanceToTarget = targetOffset - m_Level4ChainPlatformOffset;
+    const float desiredVelocity = std::clamp(
+        distanceToTarget * 0.08f,
+        -m_Level4ChainPlatformSpeed,
         m_Level4ChainPlatformSpeed
     );
+    m_Level4ChainPlatformVelocity = MoveToward(
+        m_Level4ChainPlatformVelocity,
+        desiredVelocity,
+        m_Level4ChainPlatformAcceleration
+    );
 
-    if (std::abs(m_Level4ChainPlatformOffset - oldOffset) <= 0.001f) {
-        for (std::size_t i = 0;
-             i < m_Level4HorizontalChainLinks.size() &&
-             i < m_Level4HorizontalChainBasePositions.size();
-             ++i) {
-            if (!m_Level4HorizontalChainLinks[i]) {
-                continue;
-            }
-
-            m_Level4HorizontalChainLinks[i]->SetPosition(m_Level4HorizontalChainBasePositions[i]);
-            m_Level4HorizontalChainLinks[i]->SetVisible(true);
-            m_Level4HorizontalChainLinks[i]->m_Transform.rotation = 1.57079632679f;
-        }
-        return;
+    float nextOffset = m_Level4ChainPlatformOffset + m_Level4ChainPlatformVelocity;
+    const bool crossesTarget =
+        (distanceToTarget > 0.0f && nextOffset >= targetOffset) ||
+        (distanceToTarget < 0.0f && nextOffset <= targetOffset);
+    if (crossesTarget ||
+        (std::abs(distanceToTarget) <= 0.05f &&
+         std::abs(m_Level4ChainPlatformVelocity) <= m_Level4ChainPlatformAcceleration)) {
+        nextOffset = targetOffset;
+        m_Level4ChainPlatformVelocity = 0.0f;
     }
+    m_Level4ChainPlatformOffset = std::clamp(
+        nextOffset,
+        -m_Level4ChainPlatformMaxOffset,
+        0.0f
+    );
 
     const SolidRect oldTop = m_Level4ChainPlatformTopCurrentRect;
     const SolidRect oldBottom = m_Level4ChainPlatformBottomCurrentRect;
@@ -1606,44 +1946,50 @@ void App::UpdateLevel4ChainPlatforms() {
 
     const float topDeltaY = m_Level4ChainPlatformTopCurrentRect.center.y - oldTop.center.y;
     const float bottomDeltaY = m_Level4ChainPlatformBottomCurrentRect.center.y - oldBottom.center.y;
-    if (!m_Level4HorizontalChainLinks.empty() && !m_Level4HorizontalChainBasePositions.empty()) {
-        const float linkStep = m_Level4HorizontalChainBasePositions.size() > 1
-            ? std::abs(m_Level4HorizontalChainBasePositions[1].x - m_Level4HorizontalChainBasePositions[0].x)
-            : 12.0f;
-        const float firstX = m_Level4HorizontalChainBasePositions.front().x;
-        const float lastX = m_Level4HorizontalChainBasePositions[
-            std::min(m_Level4HorizontalChainLinks.size(), m_Level4HorizontalChainBasePositions.size()) - 1
-        ].x;
-        const float travelWidth = std::max(1.0f, (lastX - firstX) + linkStep);
+    const float offsetDelta = m_Level4ChainPlatformOffset - oldOffset;
+    if (m_Level4HorizontalChainWidth > 0.0f) {
         m_Level4HorizontalChainAnimPhase = std::fmod(
-            m_Level4HorizontalChainAnimPhase - (m_Level4ChainPlatformOffset - oldOffset) * 1.8f,
-            travelWidth
+            m_Level4HorizontalChainAnimPhase - offsetDelta * 1.8f,
+            m_Level4HorizontalChainWidth
         );
         if (m_Level4HorizontalChainAnimPhase < 0.0f) {
-            m_Level4HorizontalChainAnimPhase += travelWidth;
+            m_Level4HorizontalChainAnimPhase += m_Level4HorizontalChainWidth;
+        }
+    }
+
+    for (std::size_t i = 0;
+         i < m_Level4HorizontalChainLinks.size() &&
+         i < m_Level4HorizontalChainBasePositions.size();
+         ++i) {
+        if (!m_Level4HorizontalChainLinks[i]) {
+            continue;
         }
 
-        for (std::size_t i = 0;
-             i < m_Level4HorizontalChainLinks.size() &&
-             i < m_Level4HorizontalChainBasePositions.size();
-             ++i) {
-            if (!m_Level4HorizontalChainLinks[i]) {
-                continue;
-            }
-
-            float x = firstX + std::fmod(
-                (m_Level4HorizontalChainBasePositions[i].x - firstX) + m_Level4HorizontalChainAnimPhase,
-                travelWidth
+        float x = m_Level4HorizontalChainBasePositions[i].x;
+        if (m_Level4HorizontalChainWidth > 0.0f &&
+            m_Level4HorizontalChainSpacing > 0.0f) {
+            x = m_Level4HorizontalChainMinX + std::fmod(
+                (static_cast<float>(i) + 0.5f) * m_Level4HorizontalChainSpacing +
+                    m_Level4HorizontalChainAnimPhase,
+                m_Level4HorizontalChainWidth
             );
-            if (x > lastX) {
-                x = firstX + (x - lastX);
-            }
-            m_Level4HorizontalChainLinks[i]->SetVisible(true);
-            m_Level4HorizontalChainLinks[i]->SetPosition({
-                x,
-                m_Level4HorizontalChainBasePositions[i].y
-            });
-            m_Level4HorizontalChainLinks[i]->m_Transform.rotation = 1.57079632679f;
+        }
+        m_Level4HorizontalChainLinks[i]->SetVisible(true);
+        m_Level4HorizontalChainLinks[i]->SetPosition({
+            x,
+            m_Level4HorizontalChainBasePositions[i].y
+        });
+        m_Level4HorizontalChainLinks[i]->m_Transform.rotation = 1.57079632679f;
+    }
+
+    constexpr float twoPi = 6.28318530718f;
+    m_Level4ChainPulleyRotation = std::fmod(
+        m_Level4ChainPulleyRotation - offsetDelta * 0.055f,
+        twoPi
+    );
+    for (const auto& pulley : m_Level4ChainPulleys) {
+        if (pulley) {
+            pulley->m_Transform.rotation = m_Level4ChainPulleyRotation;
         }
     }
 
@@ -1654,10 +2000,17 @@ void App::UpdateLevel4ChainPlatforms() {
         m_Level4ChainPlatformBottom->SetPosition(m_Level4ChainPlatformBottomCurrentRect.center);
     }
     if (m_HasLevel4ChainPlatformTop && m_Level4ChainConnectTop) {
-        m_Level4ChainConnectTop->SetPosition(m_Level4ChainConnectTop->GetPosition() + glm::vec2{0.0f, topDeltaY});
+        m_Level4ChainConnectTop->SetPosition({
+            m_Level4ChainPlatformTopCurrentRect.center.x + m_Level4ChainTopXOffset,
+            m_Level4ChainPlatformTopCurrentRect.center.y + m_Level4ChainTopConnectorYOffset,
+        });
     }
     if (m_HasLevel4ChainPlatformBottom && m_Level4ChainConnectBottom) {
-        m_Level4ChainConnectBottom->SetPosition(m_Level4ChainConnectBottom->GetPosition() + glm::vec2{0.0f, bottomDeltaY});
+        m_Level4ChainConnectBottom->SetPosition({
+            m_Level4ChainPlatformBottomCurrentRect.center.x + m_Level4ChainBottomXOffset,
+            m_Level4ChainPlatformBottomCurrentRect.center.y +
+                m_Level4ChainBottomConnectorYOffset,
+        });
     }
     if (m_HasLevel4ChainPlatformTop && m_Level4ChainTop) {
         const float anchorY = m_HasLevel4ChainTopAnchor

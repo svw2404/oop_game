@@ -19,6 +19,7 @@ void App::BuildLevel5() {
     auto addSupportRect = [this](float left, float top, float right, float bottom) {
         SolidRect rect = ImageRectToWorldRect(left, top, right, bottom);
         rect.blockBottom = false;
+        rect.isSlopeFill = true;
         m_SolidBlocks.push_back(rect);
     };
 

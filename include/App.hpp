@@ -3,6 +3,7 @@
 
 #include "pch.hpp" // IWYU pragma: export
 
+#include <array>
 #include <cstddef>
 
 #include "BackgroundImage.hpp"
@@ -123,10 +124,25 @@ private:
         std::shared_ptr<OverlayText> labelObject;
     };
 
+    enum class PauseAction {
+        None,
+        MainMenu,
+        Retry,
+        Resume,
+    };
+
+    struct PauseOverlayButton {
+        PauseAction action = PauseAction::None;
+        SolidRect rect;
+        std::shared_ptr<OverlayText> labelObject;
+    };
+
     struct LevelSelectButton {
         int levelIndex = 1;
         SolidRect rect;
         std::shared_ptr<Character> sprite;
+        std::shared_ptr<OverlayText> newLabel;
+        bool unlocked = true;
     };
 
     struct FanProp {
@@ -200,6 +216,21 @@ private:
     void UpdateExitDoors();
     void UpdateVictorySequence();
     void UpdateVictoryOverlayVisuals();
+    void BuildGameplayUi();
+    bool HandlePauseToggle();
+    void UpdateTimerHud();
+    void UpdatePauseOverlay();
+    void UpdatePauseOverlayVisuals();
+    void ResumeGameplay();
+    [[nodiscard]] float GetDisplayedLevelTimeMs() const;
+    void BuildVolumeControl();
+    bool UpdateVolumeControl();
+    void ApplyVolumeState();
+    void UpdateVolumeControlVisual(bool hovered);
+    void LoadLevelProgress();
+    void MarkActiveLevelCompleted();
+    [[nodiscard]] bool IsLevelCompleted(int levelIndex) const;
+    [[nodiscard]] bool IsLevelUnlocked(int levelIndex) const;
     void UpdateFailOverlay();
     void UpdateFailOverlayVisuals();
     void ResetFailOverlayLatch();
@@ -246,7 +277,7 @@ private:
         const SolidRect& oldPlatform,
         float platformDeltaY
     ) const;
-    float ClampDescendingPlatformDeltaAgainstCharacter(
+    float ClampPlatformDeltaAgainstCharacter(
         const std::shared_ptr<HeadBodyCharacter>& character,
         const CharacterCollisionProfile& profile,
         const SolidRect& oldPlatform,
@@ -332,7 +363,8 @@ private:
     void ResolveHorizontalCollisions(
         const glm::vec2& oldPos,
         glm::vec2& newPos,
-        const CharacterCollisionProfile& profile
+        const CharacterCollisionProfile& profile,
+        bool onGround
     );
     void ResolveVerticalCollisions(
         const glm::vec2& oldPos,
@@ -361,6 +393,12 @@ private:
         const SolidRect& blockingBlock,
         const CharacterCollisionProfile& profile
     ) const;
+    bool TryStepFromSlopeHighEnd(
+        const glm::vec2& oldPos,
+        glm::vec2& newPos,
+        const SolidRect& blockingBlock,
+        const CharacterCollisionProfile& profile
+    ) const;
     bool FindBestSlopeYAtX(
         const glm::vec2& oldPos,
         float desiredX,
@@ -384,6 +422,7 @@ private:
         float& outCeilingY,
         const CharacterCollisionProfile& profile
     ) const;
+    bool RunSlopeTopTransitionRegressionAudit() const;
     void RecalculateCharacterCollisionBoxes(
         const std::shared_ptr<HeadBodyCharacter>& character,
         CharacterCollisionProfile& profile
@@ -458,6 +497,7 @@ private:
     std::shared_ptr<Character> m_Level4ChainConnectBottom;
     std::vector<std::shared_ptr<Character>> m_Level4HorizontalChainLinks;
     std::vector<glm::vec2> m_Level4HorizontalChainBasePositions;
+    std::vector<std::shared_ptr<Character>> m_Level4ChainPulleys;
     std::shared_ptr<Character> m_Level2TopButtonLeft;
     std::shared_ptr<Character> m_Level2TopButtonRight;
     std::shared_ptr<Character> m_Cube;
@@ -467,10 +507,21 @@ private:
     std::vector<std::shared_ptr<Util::GameObject>> m_AnimatedLevelProps;
     std::vector<std::shared_ptr<Util::GameObject>> m_FailOverlayObjects;
     std::vector<std::shared_ptr<Util::GameObject>> m_VictoryOverlayObjects;
+    std::vector<std::shared_ptr<Util::GameObject>> m_PauseOverlayObjects;
     std::vector<CollectibleDiamond> m_Diamonds;
     std::vector<FanProp> m_Fans;
     std::shared_ptr<BackgroundImage> m_LevelSelectBackground;
     std::vector<LevelSelectButton> m_LevelSelectButtons;
+    std::shared_ptr<Character> m_VolumeControlIcon;
+    std::shared_ptr<Character> m_TimerHudPanel;
+    std::shared_ptr<OverlayText> m_TimerHudText;
+    std::shared_ptr<Character> m_PauseDimmer;
+    std::shared_ptr<Character> m_PauseOverlayPanel;
+    std::shared_ptr<OverlayText> m_PauseOverlayTitle;
+    std::shared_ptr<Character> m_PauseBlueDiamondIcon;
+    std::shared_ptr<Character> m_PauseRedDiamondIcon;
+    std::shared_ptr<OverlayText> m_PauseBlueDiamondText;
+    std::shared_ptr<OverlayText> m_PauseRedDiamondText;
 
     // ------------------------------------------------------------------------
     // Physics parameters
@@ -548,6 +599,9 @@ private:
     int m_WaterDiamondsTotal = 0;
     int m_GreenDiamondsTotal = 0;
     int m_ActiveLevelIndex = 3;
+    std::array<bool, 5> m_CompletedLevels = {};
+    bool m_LevelProgressLoaded = false;
+    int m_NewlyUnlockedLevelIndex = 0;
 
     glm::vec2 m_BackgroundOriginalSize = {2380.0f, 1760.0f};
     glm::vec2 m_BackgroundDisplayedSize = {1244.16f, 699.84f};
@@ -607,6 +661,14 @@ private:
     bool m_HasCubeBlock = false;
     bool m_LevelSelectBuilt = false;
     bool m_LevelSelectMouseLatch = false;
+    bool m_AudioMuted = false;
+    bool m_AudioStateInitialized = false;
+    bool m_VolumeControlMouseLatch = false;
+    bool m_GamePaused = false;
+    bool m_PauseMouseLatch = false;
+    int m_UnmutedMusicVolume = MIX_MAX_VOLUME;
+    int m_UnmutedSfxVolume = MIX_MAX_VOLUME;
+    SolidRect m_VolumeControlRect;
     bool m_GreenPlatform2UseVerticalVisualClip = false;
     bool m_GreenButtonPressed = false;
     bool m_GreenSwitchOn = false;
@@ -633,14 +695,22 @@ private:
     float m_Level2HangingPlatformTorqueScale = 0.015f;
     float m_Level2HangingPlatformAngularSpeed = 1.6f;
     float m_Level4ChainPlatformOffset = 0.0f;
+    float m_Level4ChainPlatformVelocity = 0.0f;
     float m_Level4ChainPlatformMaxOffset = 82.0f;
     float m_Level4ChainPlatformSpeed = 1.8f;
+    float m_Level4ChainPlatformAcceleration = 0.08f;
     float m_Level4ChainPlatformBottomTravelScale = 1.0f;
     float m_Level4ChainTopXOffset = 0.0f;
     float m_Level4ChainBottomXOffset = 0.0f;
     float m_Level4ChainTopAnchorY = 0.0f;
     float m_Level4ChainBottomAnchorY = 0.0f;
+    float m_Level4ChainTopConnectorYOffset = 0.0f;
+    float m_Level4ChainBottomConnectorYOffset = 0.0f;
+    float m_Level4HorizontalChainMinX = 0.0f;
+    float m_Level4HorizontalChainWidth = 0.0f;
+    float m_Level4HorizontalChainSpacing = 0.0f;
     float m_Level4HorizontalChainAnimPhase = 0.0f;
+    float m_Level4ChainPulleyRotation = 0.0f;
     VictoryPhase m_VictoryPhase = VictoryPhase::None;
     float m_VictoryTimer = 0.0f;
     float m_VictoryRunDuration = 0.30f;
@@ -651,6 +721,7 @@ private:
     float m_VictoryDoorSinkYOffset = 2.0f;
     float m_LevelStartTimeMs = 0.0f;
     float m_LevelCompleteTimeMs = 0.0f;
+    float m_PauseStartedTimeMs = 0.0f;
     float m_DoorFrameDuration = 0.06f;
     bool m_FailOverlayVisible = false;
     bool m_FailOverlayMouseLatch = false;
@@ -669,6 +740,9 @@ private:
     std::shared_ptr<OverlayText> m_VictoryRedDiamondText;
     std::shared_ptr<OverlayText> m_VictoryRankText;
     VictoryOverlayButton m_VictoryContinueButton;
+    PauseOverlayButton m_PauseMainMenuButton;
+    PauseOverlayButton m_PauseRetryButton;
+    PauseOverlayButton m_PauseResumeButton;
 
     std::unique_ptr<Util::BGM> m_GameplayMusic;
     std::unique_ptr<Util::BGM> m_DeathMusic;

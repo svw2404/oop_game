@@ -1290,7 +1290,17 @@ void App::CarryCharacterWithPlatform(
     const SolidRect& oldPlatform,
     float platformDeltaY
 ) const {
-    if (!character || !character->IsAlive() || std::abs(platformDeltaY) <= 0.001f) {
+    CarryCharacterWithPlatform(character, profile, oldPlatform, glm::vec2{0.0f, platformDeltaY});
+}
+
+void App::CarryCharacterWithPlatform(
+    const std::shared_ptr<HeadBodyCharacter>& character,
+    const CharacterCollisionProfile& profile,
+    const SolidRect& oldPlatform,
+    const glm::vec2& platformDelta
+) const {
+    if (!character || !character->IsAlive() ||
+        (std::abs(platformDelta.x) <= 0.001f && std::abs(platformDelta.y) <= 0.001f)) {
         return;
     }
 
@@ -1306,7 +1316,7 @@ void App::CarryCharacterWithPlatform(
         bodyCenter.x - bodySize.x * 0.5f < oldPlatform.center.x + oldPlatform.size.x * 0.5f;
 
     if (stoodOnPlatform) {
-        character->SetPosition(character->GetPosition() + glm::vec2{0.0f, platformDeltaY});
+        character->SetPosition(character->GetPosition() + platformDelta);
     }
 }
 
@@ -1436,7 +1446,12 @@ void App::CarryCharacterWithCube(
 }
 
 void App::CarryCubeWithPlatform(const SolidRect& oldPlatform, float platformDeltaY) {
-    if (!m_HasCubeBlock || std::abs(platformDeltaY) <= 0.001f) {
+    CarryCubeWithPlatform(oldPlatform, glm::vec2{0.0f, platformDeltaY});
+}
+
+void App::CarryCubeWithPlatform(const SolidRect& oldPlatform, const glm::vec2& platformDelta) {
+    if (!m_HasCubeBlock ||
+        (std::abs(platformDelta.x) <= 0.001f && std::abs(platformDelta.y) <= 0.001f)) {
         return;
     }
 
@@ -1449,8 +1464,10 @@ void App::CarryCubeWithPlatform(const SolidRect& oldPlatform, float platformDelt
         m_CubeRect.center.x - m_CubeRect.size.x * 0.5f < oldPlatform.center.x + oldPlatform.size.x * 0.5f;
 
     if (stoodOnPlatform) {
-        m_CubeRect.center.y += platformDeltaY;
-        m_CubeVelocity.y = 0.0f;
+        m_CubeRect.center += platformDelta;
+        if (std::abs(platformDelta.y) > 0.001f) {
+            m_CubeVelocity.y = 0.0f;
+        }
         m_CubeOnGround = true;
         if (m_CubeBlockIndex < m_SolidBlocks.size()) {
             m_SolidBlocks[m_CubeBlockIndex] = m_CubeRect;
@@ -1462,6 +1479,58 @@ void App::CarryCubeWithPlatform(const SolidRect& oldPlatform, float platformDelt
 }
 
 void App::UpdateGreenPlatform() {
+    if (!m_Level5SwitchPlatforms.empty()) {
+        for (auto& switchPlatform : m_Level5SwitchPlatforms) {
+            if (switchPlatform.blockIndex >= m_SolidBlocks.size()) {
+                continue;
+            }
+
+            const SolidRect oldPlatform = switchPlatform.currentRect;
+            const SolidRect& target = switchPlatform.switchOn
+                ? switchPlatform.pressedRect
+                : switchPlatform.restRect;
+            const float requestedY = MoveToward(
+                oldPlatform.center.y,
+                target.center.y,
+                m_GreenPlatformSpeed
+            );
+            float deltaY = requestedY - oldPlatform.center.y;
+            deltaY = ClampPlatformDeltaAgainstCharacter(
+                m_Fireboy,
+                m_FireboyCollision,
+                oldPlatform,
+                deltaY,
+                switchPlatform.blockIndex
+            );
+            deltaY = ClampPlatformDeltaAgainstCharacter(
+                m_Watergirl,
+                m_WatergirlCollision,
+                oldPlatform,
+                deltaY,
+                switchPlatform.blockIndex
+            );
+            switchPlatform.currentRect.center.y = oldPlatform.center.y + deltaY;
+            const float requestedX = MoveToward(
+                oldPlatform.center.x,
+                target.center.x,
+                m_GreenPlatformSpeed
+            );
+            const float deltaX = requestedX - oldPlatform.center.x;
+            switchPlatform.currentRect.center.x = oldPlatform.center.x + deltaX;
+
+            m_SolidBlocks[switchPlatform.blockIndex] = switchPlatform.currentRect;
+            if (switchPlatform.platform) {
+                switchPlatform.platform->SetPosition(switchPlatform.currentRect.center);
+            }
+
+            const glm::vec2 platformDelta{deltaX, deltaY};
+            CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldPlatform, platformDelta);
+            CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldPlatform, platformDelta);
+            CarryCubeWithPlatform(oldPlatform, platformDelta);
+        }
+        return;
+    }
+
     if (!m_HasGreenPlatformBlock || m_GreenPlatformBlockIndex >= m_SolidBlocks.size()) {
         return;
     }
@@ -2055,6 +2124,193 @@ void App::UpdateLevel4ChainPlatforms() {
         CarryCubeWithPlatform(oldTop, topDeltaY);
     }
     if (m_HasLevel4ChainPlatformBottom) {
+        CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldBottom, bottomDeltaY);
+        CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldBottom, bottomDeltaY);
+        CarryCubeWithPlatform(oldBottom, bottomDeltaY);
+    }
+}
+
+void App::UpdateLevel5HumanChainPlatforms() {
+    if (!m_HasLevel5ChainPlatforms ||
+        (!m_HasLevel5ChainPlatformTop && !m_HasLevel5ChainPlatformBottom) ||
+        (m_HasLevel5ChainPlatformTop && m_Level5ChainPlatformTopBlockIndex >= m_SolidBlocks.size()) ||
+        (m_HasLevel5ChainPlatformBottom && m_Level5ChainPlatformBottomBlockIndex >= m_SolidBlocks.size())) {
+        return;
+    }
+
+    auto characterStandsOn = [&](const std::shared_ptr<HeadBodyCharacter>& character,
+                                 const CharacterCollisionProfile& profile,
+                                 const SolidRect& platform) {
+        return CharacterPressesRectFromAbove(character, profile, platform);
+    };
+
+    const bool topLoaded =
+        m_HasLevel5ChainPlatformTop &&
+        (characterStandsOn(m_Fireboy, m_FireboyCollision, m_Level5ChainPlatformTopCurrentRect) ||
+         characterStandsOn(m_Watergirl, m_WatergirlCollision, m_Level5ChainPlatformTopCurrentRect));
+    const bool bottomLoaded =
+        m_HasLevel5ChainPlatformBottom &&
+        (characterStandsOn(m_Fireboy, m_FireboyCollision, m_Level5ChainPlatformBottomCurrentRect) ||
+         characterStandsOn(m_Watergirl, m_WatergirlCollision, m_Level5ChainPlatformBottomCurrentRect));
+
+    const float targetOffset =
+        topLoaded && !bottomLoaded ? -m_Level5ChainPlatformMaxOffset : 0.0f;
+
+    const float oldOffset = m_Level5ChainPlatformOffset;
+    const float distanceToTarget = targetOffset - m_Level5ChainPlatformOffset;
+    const float desiredVelocity = std::clamp(
+        distanceToTarget * 0.08f,
+        -m_Level5ChainPlatformSpeed,
+        m_Level5ChainPlatformSpeed
+    );
+    m_Level5ChainPlatformVelocity = MoveToward(
+        m_Level5ChainPlatformVelocity,
+        desiredVelocity,
+        m_Level5ChainPlatformAcceleration
+    );
+
+    float nextOffset = m_Level5ChainPlatformOffset + m_Level5ChainPlatformVelocity;
+    const bool crossesTarget =
+        (distanceToTarget > 0.0f && nextOffset >= targetOffset) ||
+        (distanceToTarget < 0.0f && nextOffset <= targetOffset);
+    if (crossesTarget ||
+        (std::abs(distanceToTarget) <= 0.05f &&
+         std::abs(m_Level5ChainPlatformVelocity) <= m_Level5ChainPlatformAcceleration)) {
+        nextOffset = targetOffset;
+        m_Level5ChainPlatformVelocity = 0.0f;
+    }
+    m_Level5ChainPlatformOffset = std::clamp(
+        nextOffset,
+        -m_Level5ChainPlatformMaxOffset,
+        0.0f
+    );
+
+    const SolidRect oldTop = m_Level5ChainPlatformTopCurrentRect;
+    const SolidRect oldBottom = m_Level5ChainPlatformBottomCurrentRect;
+
+    if (m_HasLevel5ChainPlatformTop) {
+        m_Level5ChainPlatformTopCurrentRect = m_Level5ChainPlatformTopRestRect;
+        m_Level5ChainPlatformTopCurrentRect.center.y += m_Level5ChainPlatformOffset;
+        m_SolidBlocks[m_Level5ChainPlatformTopBlockIndex] = m_Level5ChainPlatformTopCurrentRect;
+    }
+    if (m_HasLevel5ChainPlatformBottom) {
+        m_Level5ChainPlatformBottomCurrentRect = m_Level5ChainPlatformBottomRestRect;
+        m_Level5ChainPlatformBottomCurrentRect.center.y -=
+            m_Level5ChainPlatformOffset * m_Level5ChainPlatformBottomTravelScale;
+        m_SolidBlocks[m_Level5ChainPlatformBottomBlockIndex] = m_Level5ChainPlatformBottomCurrentRect;
+    }
+
+    const float topDeltaY = m_Level5ChainPlatformTopCurrentRect.center.y - oldTop.center.y;
+    const float bottomDeltaY = m_Level5ChainPlatformBottomCurrentRect.center.y - oldBottom.center.y;
+    const float offsetDelta = m_Level5ChainPlatformOffset - oldOffset;
+    if (m_Level5HorizontalChainWidth > 0.0f) {
+        m_Level5HorizontalChainAnimPhase = std::fmod(
+            m_Level5HorizontalChainAnimPhase - offsetDelta * 1.8f,
+            m_Level5HorizontalChainWidth
+        );
+        if (m_Level5HorizontalChainAnimPhase < 0.0f) {
+            m_Level5HorizontalChainAnimPhase += m_Level5HorizontalChainWidth;
+        }
+    }
+
+    for (std::size_t i = 0;
+         i < m_Level5HorizontalChainLinks.size() &&
+         i < m_Level5HorizontalChainBasePositions.size();
+         ++i) {
+        if (!m_Level5HorizontalChainLinks[i]) {
+            continue;
+        }
+
+        float x = m_Level5HorizontalChainBasePositions[i].x;
+        if (m_Level5HorizontalChainWidth > 0.0f &&
+            m_Level5HorizontalChainSpacing > 0.0f) {
+            x = m_Level5HorizontalChainMinX + std::fmod(
+                (static_cast<float>(i) + 0.5f) * m_Level5HorizontalChainSpacing +
+                    m_Level5HorizontalChainAnimPhase,
+                m_Level5HorizontalChainWidth
+            );
+        }
+        m_Level5HorizontalChainLinks[i]->SetVisible(true);
+        m_Level5HorizontalChainLinks[i]->SetPosition({
+            x,
+            m_Level5HorizontalChainBasePositions[i].y
+        });
+        m_Level5HorizontalChainLinks[i]->m_Transform.rotation = 1.57079632679f;
+    }
+
+    constexpr float twoPi = 6.28318530718f;
+    m_Level5ChainPulleyRotation = std::fmod(
+        m_Level5ChainPulleyRotation - offsetDelta * 0.055f,
+        twoPi
+    );
+    for (const auto& pulley : m_Level5ChainPulleys) {
+        if (pulley) {
+            pulley->m_Transform.rotation = m_Level5ChainPulleyRotation;
+        }
+    }
+
+    if (m_HasLevel5ChainPlatformTop && m_Level5ChainPlatformTop) {
+        m_Level5ChainPlatformTop->SetPosition(m_Level5ChainPlatformTopCurrentRect.center);
+    }
+    if (m_HasLevel5ChainPlatformBottom && m_Level5ChainPlatformBottom) {
+        m_Level5ChainPlatformBottom->SetPosition(m_Level5ChainPlatformBottomCurrentRect.center);
+    }
+    if (m_HasLevel5ChainPlatformTop && m_Level5ChainConnectTop) {
+        m_Level5ChainConnectTop->SetPosition({
+            m_Level5ChainPlatformTopCurrentRect.center.x + m_Level5ChainTopXOffset,
+            m_Level5ChainPlatformTopCurrentRect.center.y + m_Level5ChainTopConnectorYOffset,
+        });
+    }
+    if (m_HasLevel5ChainPlatformBottom && m_Level5ChainConnectBottom) {
+        m_Level5ChainConnectBottom->SetPosition({
+            m_Level5ChainPlatformBottomCurrentRect.center.x + m_Level5ChainBottomXOffset,
+            m_Level5ChainPlatformBottomCurrentRect.center.y +
+                m_Level5ChainBottomConnectorYOffset,
+        });
+    }
+    if (m_HasLevel5ChainPlatformTop && m_Level5ChainTop) {
+        const float anchorY = m_HasLevel5ChainTopAnchor
+            ? m_Level5ChainTopAnchorY
+            : oldTop.center.y + oldTop.size.y * 2.0f;
+        const float chainEndY = m_Level5ChainConnectTop
+            ? m_Level5ChainConnectTop->GetPosition().y
+            : m_Level5ChainPlatformTopCurrentRect.center.y +
+                m_Level5ChainPlatformTopCurrentRect.size.y * 0.5f;
+        const glm::vec2 chainSize = m_Level5ChainTop->GetSize();
+        m_Level5ChainTop->SetSize({
+            chainSize.x,
+            std::max(1.0f, std::abs(anchorY - chainEndY))
+        });
+        m_Level5ChainTop->SetPosition({
+            m_Level5ChainPlatformTopCurrentRect.center.x + m_Level5ChainTopXOffset,
+            (anchorY + chainEndY) * 0.5f
+        });
+    }
+    if (m_HasLevel5ChainPlatformBottom && m_Level5ChainBottom) {
+        const float anchorY = m_HasLevel5ChainBottomAnchor
+            ? m_Level5ChainBottomAnchorY
+            : oldBottom.center.y + oldBottom.size.y * 2.0f;
+        const float chainEndY = m_Level5ChainConnectBottom
+            ? m_Level5ChainConnectBottom->GetPosition().y
+            : m_Level5ChainPlatformBottomCurrentRect.center.y +
+                m_Level5ChainPlatformBottomCurrentRect.size.y * 0.5f;
+        const glm::vec2 chainSize = m_Level5ChainBottom->GetSize();
+        m_Level5ChainBottom->SetSize({
+            chainSize.x,
+            std::max(1.0f, std::abs(anchorY - chainEndY))
+        });
+        m_Level5ChainBottom->SetPosition({
+            m_Level5ChainPlatformBottomCurrentRect.center.x + m_Level5ChainBottomXOffset,
+            (anchorY + chainEndY) * 0.5f
+        });
+    }
+
+    if (m_HasLevel5ChainPlatformTop) {
+        CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldTop, topDeltaY);
+        CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldTop, topDeltaY);
+        CarryCubeWithPlatform(oldTop, topDeltaY);
+    }
+    if (m_HasLevel5ChainPlatformBottom) {
         CarryCharacterWithPlatform(m_Fireboy, m_FireboyCollision, oldBottom, bottomDeltaY);
         CarryCharacterWithPlatform(m_Watergirl, m_WatergirlCollision, oldBottom, bottomDeltaY);
         CarryCubeWithPlatform(oldBottom, bottomDeltaY);

@@ -97,6 +97,18 @@ private:
         bool occupied = false;
     };
 
+    struct Level5SwitchPlatform {
+        std::shared_ptr<Character> platform;
+        std::shared_ptr<Character> switchSprite;
+        SolidRect restRect;
+        SolidRect pressedRect;
+        SolidRect currentRect;
+        SolidRect switchHitbox;
+        std::size_t blockIndex = 0;
+        bool switchOn = false;
+        bool touchLatch = false;
+    };
+
     enum class VictoryPhase {
         None,
         RunIntoDoor,
@@ -184,6 +196,7 @@ private:
     void UpdateLevel2HiddenPlatform();
     void UpdateLevel2HangingPlatform();
     void UpdateLevel4ChainPlatforms();
+    void UpdateLevel5HumanChainPlatforms();
     void UpdateFans();
     void UpdateCubePhysics();
     void ResolveCubeHorizontalCollisions(
@@ -277,6 +290,12 @@ private:
         const SolidRect& oldPlatform,
         float platformDeltaY
     ) const;
+    void CarryCharacterWithPlatform(
+        const std::shared_ptr<HeadBodyCharacter>& character,
+        const CharacterCollisionProfile& profile,
+        const SolidRect& oldPlatform,
+        const glm::vec2& platformDelta
+    ) const;
     float ClampPlatformDeltaAgainstCharacter(
         const std::shared_ptr<HeadBodyCharacter>& character,
         const CharacterCollisionProfile& profile,
@@ -291,6 +310,7 @@ private:
         const glm::vec2& cubeDelta
     ) const;
     void CarryCubeWithPlatform(const SolidRect& oldPlatform, float platformDeltaY);
+    void CarryCubeWithPlatform(const SolidRect& oldPlatform, const glm::vec2& platformDelta);
     void HandleFireboyInput();
     void HandleWatergirlInput();
     void UpdateFireboyPhysics();
@@ -498,6 +518,15 @@ private:
     std::vector<std::shared_ptr<Character>> m_Level4HorizontalChainLinks;
     std::vector<glm::vec2> m_Level4HorizontalChainBasePositions;
     std::vector<std::shared_ptr<Character>> m_Level4ChainPulleys;
+    std::shared_ptr<Character> m_Level5ChainPlatformTop;
+    std::shared_ptr<Character> m_Level5ChainPlatformBottom;
+    std::shared_ptr<Character> m_Level5ChainTop;
+    std::shared_ptr<Character> m_Level5ChainBottom;
+    std::shared_ptr<Character> m_Level5ChainConnectTop;
+    std::shared_ptr<Character> m_Level5ChainConnectBottom;
+    std::vector<std::shared_ptr<Character>> m_Level5HorizontalChainLinks;
+    std::vector<glm::vec2> m_Level5HorizontalChainBasePositions;
+    std::vector<std::shared_ptr<Character>> m_Level5ChainPulleys;
     std::shared_ptr<Character> m_Level2TopButtonLeft;
     std::shared_ptr<Character> m_Level2TopButtonRight;
     std::shared_ptr<Character> m_Cube;
@@ -510,6 +539,7 @@ private:
     std::vector<std::shared_ptr<Util::GameObject>> m_PauseOverlayObjects;
     std::vector<CollectibleDiamond> m_Diamonds;
     std::vector<FanProp> m_Fans;
+    std::vector<Level5SwitchPlatform> m_Level5SwitchPlatforms;
     std::shared_ptr<BackgroundImage> m_LevelSelectBackground;
     std::vector<LevelSelectButton> m_LevelSelectButtons;
     std::shared_ptr<Character> m_VolumeControlIcon;
@@ -635,6 +665,10 @@ private:
     SolidRect m_Level4ChainPlatformBottomRestRect;
     SolidRect m_Level4ChainPlatformTopCurrentRect;
     SolidRect m_Level4ChainPlatformBottomCurrentRect;
+    SolidRect m_Level5ChainPlatformTopRestRect;
+    SolidRect m_Level5ChainPlatformBottomRestRect;
+    SolidRect m_Level5ChainPlatformTopCurrentRect;
+    SolidRect m_Level5ChainPlatformBottomCurrentRect;
     SolidRect m_Level2TopButtonLeftHitbox;
     SolidRect m_Level2TopButtonRightHitbox;
     SolidRect m_CubeRect;
@@ -647,6 +681,8 @@ private:
     std::size_t m_Level2HangingPlatformSlopeIndex2 = 0;
     std::size_t m_Level4ChainPlatformTopBlockIndex = 0;
     std::size_t m_Level4ChainPlatformBottomBlockIndex = 0;
+    std::size_t m_Level5ChainPlatformTopBlockIndex = 0;
+    std::size_t m_Level5ChainPlatformBottomBlockIndex = 0;
     std::size_t m_CubeBlockIndex = 0;
     bool m_HasGreenPlatformBlock = false;
     bool m_HasGreenPlatformBlock2 = false;
@@ -658,6 +694,11 @@ private:
     bool m_HasLevel4ChainPlatformBottom = false;
     bool m_HasLevel4ChainTopAnchor = false;
     bool m_HasLevel4ChainBottomAnchor = false;
+    bool m_HasLevel5ChainPlatforms = false;
+    bool m_HasLevel5ChainPlatformTop = false;
+    bool m_HasLevel5ChainPlatformBottom = false;
+    bool m_HasLevel5ChainTopAnchor = false;
+    bool m_HasLevel5ChainBottomAnchor = false;
     bool m_HasCubeBlock = false;
     bool m_LevelSelectBuilt = false;
     bool m_LevelSelectMouseLatch = false;
@@ -711,6 +752,23 @@ private:
     float m_Level4HorizontalChainSpacing = 0.0f;
     float m_Level4HorizontalChainAnimPhase = 0.0f;
     float m_Level4ChainPulleyRotation = 0.0f;
+    float m_Level5ChainPlatformOffset = 0.0f;
+    float m_Level5ChainPlatformVelocity = 0.0f;
+    float m_Level5ChainPlatformMaxOffset = 82.0f;
+    float m_Level5ChainPlatformSpeed = 1.8f;
+    float m_Level5ChainPlatformAcceleration = 0.08f;
+    float m_Level5ChainPlatformBottomTravelScale = 1.0f;
+    float m_Level5ChainTopXOffset = 0.0f;
+    float m_Level5ChainBottomXOffset = 0.0f;
+    float m_Level5ChainTopAnchorY = 0.0f;
+    float m_Level5ChainBottomAnchorY = 0.0f;
+    float m_Level5ChainTopConnectorYOffset = 0.0f;
+    float m_Level5ChainBottomConnectorYOffset = 0.0f;
+    float m_Level5HorizontalChainMinX = 0.0f;
+    float m_Level5HorizontalChainWidth = 0.0f;
+    float m_Level5HorizontalChainSpacing = 0.0f;
+    float m_Level5HorizontalChainAnimPhase = 0.0f;
+    float m_Level5ChainPulleyRotation = 0.0f;
     VictoryPhase m_VictoryPhase = VictoryPhase::None;
     float m_VictoryTimer = 0.0f;
     float m_VictoryRunDuration = 0.30f;

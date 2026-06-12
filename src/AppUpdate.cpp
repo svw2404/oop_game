@@ -72,6 +72,7 @@ void App::Update() {
         UpdateLevel2HiddenPlatform();
         UpdateLevel2HangingPlatform();
         UpdateLevel4ChainPlatforms();
+        UpdateLevel5HumanChainPlatforms();
         UpdateFans();
         CheckHazards();
         UpdateDeathSequence();
@@ -1006,6 +1007,27 @@ void App::UpdateDeathSequence() {
 
 void App::UpdateGreenSwitch() {
     // Switches are toggle-based and independent from the hold-to-press buttons.
+    if (!m_Level5SwitchPlatforms.empty()) {
+        const auto offPath = std::string(GA_RESOURCE_DIR) + "/Image/Assets/switch_green_off.png";
+        const auto onPath = std::string(GA_RESOURCE_DIR) + "/Image/Assets/switch_green_on.png";
+        for (auto& switchPlatform : m_Level5SwitchPlatforms) {
+            const bool touched =
+                CharacterTouchesRect(m_Fireboy, m_FireboyCollision, switchPlatform.switchHitbox) ||
+                CharacterTouchesRect(m_Watergirl, m_WatergirlCollision, switchPlatform.switchHitbox) ||
+                CubeTouchesRect(switchPlatform.switchHitbox);
+
+            if (touched && !switchPlatform.touchLatch) {
+                switchPlatform.switchOn = !switchPlatform.switchOn;
+                if (switchPlatform.switchSprite) {
+                    switchPlatform.switchSprite->SetImage(switchPlatform.switchOn ? onPath : offPath);
+                }
+            }
+
+            switchPlatform.touchLatch = touched;
+        }
+        return;
+    }
+
     if (!m_GreenSwitch) {
         return;
     }

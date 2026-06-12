@@ -81,6 +81,7 @@ void App::Start() {
     m_AnimatedLevelProps.clear();
     m_FailOverlayObjects.clear();
     m_Diamonds.clear();
+    m_Level5SwitchPlatforms.clear();
     m_GreenButton.reset();
     m_GreenButtonAfter.reset();
     m_GreenButtonAfter2.reset();
@@ -99,6 +100,15 @@ void App::Start() {
     m_Level4HorizontalChainLinks.clear();
     m_Level4HorizontalChainBasePositions.clear();
     m_Level4ChainPulleys.clear();
+    m_Level5ChainPlatformTop.reset();
+    m_Level5ChainPlatformBottom.reset();
+    m_Level5ChainTop.reset();
+    m_Level5ChainBottom.reset();
+    m_Level5ChainConnectTop.reset();
+    m_Level5ChainConnectBottom.reset();
+    m_Level5HorizontalChainLinks.clear();
+    m_Level5HorizontalChainBasePositions.clear();
+    m_Level5ChainPulleys.clear();
     m_Level2TopButtonLeft.reset();
     m_Level2TopButtonRight.reset();
     m_Cube.reset();
@@ -191,12 +201,19 @@ void App::Start() {
     m_HasLevel4ChainPlatformBottom = false;
     m_HasLevel4ChainTopAnchor = false;
     m_HasLevel4ChainBottomAnchor = false;
+    m_HasLevel5ChainPlatforms = false;
+    m_HasLevel5ChainPlatformTop = false;
+    m_HasLevel5ChainPlatformBottom = false;
+    m_HasLevel5ChainTopAnchor = false;
+    m_HasLevel5ChainBottomAnchor = false;
     m_Level2HiddenPlatformBlockIndex = 0;
     m_Level2HangingPlatformBlockIndex = 0;
     m_Level2HangingPlatformSlopeIndex = 0;
     m_Level2HangingPlatformSlopeIndex2 = 0;
     m_Level4ChainPlatformTopBlockIndex = 0;
     m_Level4ChainPlatformBottomBlockIndex = 0;
+    m_Level5ChainPlatformTopBlockIndex = 0;
+    m_Level5ChainPlatformBottomBlockIndex = 0;
     m_Level2TopButtonLeftPressVisual = 0.0f;
     m_Level2TopButtonRightPressVisual = 0.0f;
     m_Level2HangingPlatformAngle = 0.0f;
@@ -215,6 +232,20 @@ void App::Start() {
     m_Level4HorizontalChainSpacing = 0.0f;
     m_Level4HorizontalChainAnimPhase = 0.0f;
     m_Level4ChainPulleyRotation = 0.0f;
+    m_Level5ChainPlatformOffset = 0.0f;
+    m_Level5ChainPlatformVelocity = 0.0f;
+    m_Level5ChainPlatformBottomTravelScale = 1.0f;
+    m_Level5ChainTopXOffset = 0.0f;
+    m_Level5ChainBottomXOffset = 0.0f;
+    m_Level5ChainTopAnchorY = 0.0f;
+    m_Level5ChainBottomAnchorY = 0.0f;
+    m_Level5ChainTopConnectorYOffset = 0.0f;
+    m_Level5ChainBottomConnectorYOffset = 0.0f;
+    m_Level5HorizontalChainMinX = 0.0f;
+    m_Level5HorizontalChainWidth = 0.0f;
+    m_Level5HorizontalChainSpacing = 0.0f;
+    m_Level5HorizontalChainAnimPhase = 0.0f;
+    m_Level5ChainPulleyRotation = 0.0f;
 
     if (!m_GameplayMusic) {
         m_GameplayMusic = std::make_unique<Util::BGM>(
